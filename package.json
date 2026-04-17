@@ -1,0 +1,12 @@
+{
+    "name": "recus-rn",
+    "version": "0.1.0",
+    "description": "Onboarding infrastructure for React Native",
+    "main": "src/index.ts",
+    "peerDependencies": {
+        "react": ">=18.0.0",
+        "react-native": ">=0.72.0",
+        "@react-navigation/native": ">=6.0.0",
+        "@react-navigation/native-stack": ">=6.0.0"
+    }
+}
