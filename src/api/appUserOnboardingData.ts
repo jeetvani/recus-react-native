@@ -1,0 +1,95 @@
+import { appSdkRequest, JsonObject } from './client'
+import { apiRoutes } from './routes'
+
+export type AppUserOnboardingRecord = {
+  id: string
+  appId: string
+  userId: string
+  appUserId: string | null
+  onboardingFlowId: string | null
+  onboardingData: JsonObject
+  metadata: JsonObject
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export type GetAppUserOnboardingDataResponse = {
+  userOnboardingData: AppUserOnboardingRecord
+}
+
+type GetAppUserOnboardingDataParams = {
+  sdkKey?: string
+  appUserId: string
+}
+
+const toNullableString = (value: unknown): string | null => {
+  return typeof value === 'string' ? value : null
+}
+
+const toJsonObject = (value: unknown): JsonObject => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {}
+}
+
+const normalizeRecord = (
+  response: GetAppUserOnboardingDataResponse,
+): GetAppUserOnboardingDataResponse => {
+  return {
+    userOnboardingData: {
+      ...response.userOnboardingData,
+      appUserId: toNullableString(response.userOnboardingData.appUserId),
+      onboardingFlowId: toNullableString(response.userOnboardingData.onboardingFlowId),
+      onboardingData: toJsonObject(response.userOnboardingData.onboardingData),
+      metadata: toJsonObject(response.userOnboardingData.metadata),
+      createdAt: toNullableString(response.userOnboardingData.createdAt),
+      updatedAt: toNullableString(response.userOnboardingData.updatedAt),
+    },
+  }
+}
+
+export const getAppUserOnboardingData = async ({
+  sdkKey,
+  appUserId,
+}: GetAppUserOnboardingDataParams): Promise<GetAppUserOnboardingDataResponse> => {
+  const response = await appSdkRequest<GetAppUserOnboardingDataResponse>({
+    method: 'GET',
+    path: apiRoutes.appSdk.appUserOnboardingData(appUserId),
+    sdkKey,
+  })
+
+  return normalizeRecord(response)
+}
+
+export type PatchAppUserOnboardingDataResponse = GetAppUserOnboardingDataResponse
+
+export type PatchAppUserOnboardingDataBody = {
+  onboardingData: JsonObject
+  metadata?: JsonObject
+}
+
+type PatchAppUserOnboardingDataParams = {
+  sdkKey?: string
+  appUserId: string
+  onboardingData: JsonObject
+  metadata?: JsonObject
+}
+
+export const patchAppUserOnboardingData = async ({
+  sdkKey,
+  appUserId,
+  onboardingData,
+  metadata,
+}: PatchAppUserOnboardingDataParams): Promise<PatchAppUserOnboardingDataResponse> => {
+  const response = await appSdkRequest<
+    PatchAppUserOnboardingDataResponse,
+    PatchAppUserOnboardingDataBody
+  >({
+    method: 'PATCH',
+    path: apiRoutes.appSdk.appUserOnboardingData(appUserId),
+    body: metadata === undefined ? { onboardingData } : { onboardingData, metadata },
+    sdkKey,
+  })
+
+  return normalizeRecord(response)
+}
