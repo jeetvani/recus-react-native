@@ -53,7 +53,7 @@ jobs:
           PKG_VERSION="${{ steps.pkg.outputs.version }}"
 
           # `npm view <pkg>@<version> version` prints the version if it exists,
-          # and is empty if that exact version has never been published.
+          # and is empty if that exact version has never been published. 
           PUBLISHED=$(npm view "$PKG_NAME@$PKG_VERSION" version 2>/dev/null || true)
 
           if [ -z "$PUBLISHED" ]; then
