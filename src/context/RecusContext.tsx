@@ -69,6 +69,11 @@ const RecusContext = createContext<RecusContextValue | undefined>(undefined)
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
+type PersistOnboardingCompleteParams = {
+  submittedValues: Record<string, OnboardingInputValue>
+  analytics: RecusAnalytics
+}
+
 type RecusContextProviderProps = {
   sdkKey: string
   user: RecusUser | undefined
@@ -76,7 +81,15 @@ type RecusContextProviderProps = {
   appUserOnboardingData: AppUserOnboardingRecord | undefined
   isNavigationEnabled: boolean
   setCurrentScreenId: (screenId: string) => void
+  persistOnboardingComplete: (params: PersistOnboardingCompleteParams) => void
   children: React.ReactNode
+}
+
+const readPersistedCompletedAt = (
+  record: AppUserOnboardingRecord | undefined,
+): string | undefined => {
+  const value = record?.metadata?.completedAt
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 export function RecusContextProvider({
@@ -86,9 +99,10 @@ export function RecusContextProvider({
   appUserOnboardingData,
   isNavigationEnabled,
   setCurrentScreenId: persistCurrentScreenId,
+  persistOnboardingComplete,
   children,
 }: RecusContextProviderProps) {
-  const [isComplete, setIsComplete] = useState(false)
+  const [locallyCompleted, setLocallyCompleted] = useState(false)
   const [onboardingValues, setOnboardingValues] = useState<Record<string, OnboardingInputValue>>({})
   const [submittedValues, setSubmittedValues] = useState<Record<string, OnboardingInputValue>>({})
   const [analytics, setAnalytics] = useState<RecusAnalytics>({})
@@ -99,18 +113,30 @@ export function RecusContextProvider({
   // Refs used by the analytics tracker. Kept out of state so re-renders don't
   // reset the timer and reads/writes are O(1).
   const onboardingValuesRef = useRef(onboardingValues)
+  const submittedValuesRef = useRef(submittedValues)
+  const analyticsRef = useRef(analytics)
   const screensRef = useRef<AppOnboardingScreenConfig[]>([])
   const currentScreenIdRef = useRef<string | undefined>(undefined)
   const screenStartedAtRef = useRef<number | undefined>(undefined)
 
+  const persistedCompletedAt = readPersistedCompletedAt(appUserOnboardingData)
   const isActive = !!user?.userId
   const screens = onboardingFlow?.data.screens ?? []
   const isOnboardingReady = screens.length > 0 && typeof initialRoute === 'string'
   const onboardingSeedKey = `${user?.userId ?? ''}:${onboardingFlow?.id ?? ''}`
+  const isComplete = locallyCompleted || !!persistedCompletedAt
 
   useEffect(() => {
     onboardingValuesRef.current = onboardingValues
   }, [onboardingValues])
+
+  useEffect(() => {
+    submittedValuesRef.current = submittedValues
+  }, [submittedValues])
+
+  useEffect(() => {
+    analyticsRef.current = analytics
+  }, [analytics])
 
   useEffect(() => {
     screensRef.current = screens
@@ -126,13 +152,16 @@ export function RecusContextProvider({
 
     if (onboardingSeedKeyRef.current !== onboardingSeedKey) {
       onboardingSeedKeyRef.current = onboardingSeedKey
-      setIsComplete(false)
+      setLocallyCompleted(false)
       setOnboardingValues(nextOnboardingValues)
+      onboardingValuesRef.current = nextOnboardingValues
       // Anything the server already has, the user has already submitted in a
       // previous session — seed `submittedValues` accordingly so resumes show
       // a consistent picture. Reset analytics for the new session.
       setSubmittedValues(nextOnboardingValues)
+      submittedValuesRef.current = nextOnboardingValues
       setAnalytics({})
+      analyticsRef.current = {}
       currentScreenIdRef.current = undefined
       screenStartedAtRef.current = undefined
       return
@@ -177,21 +206,25 @@ export function RecusContextProvider({
   // Adds elapsed time on the currently-tracked screen into `analytics` and
   // optionally re-arms the timer for the next screen. Returning early when
   // the screen hasn't actually changed keeps re-renders to a minimum.
-  const flushScreenAnalytics = useCallback((nextScreenId?: string) => {
+  // Returns the analytics object that reflects the flush so callers that need
+  // to persist immediately don't have to wait for React to commit the state
+  // update.
+  const flushScreenAnalytics = useCallback((nextScreenId?: string): RecusAnalytics => {
     const previousScreenId = currentScreenIdRef.current
     const startedAt = screenStartedAtRef.current
     const now = Date.now()
+    let nextAnalytics = analyticsRef.current
 
     if (previousScreenId && previousScreenId !== nextScreenId && typeof startedAt === 'number') {
       const elapsed = Math.max(0, now - startedAt)
       if (elapsed > 0) {
-        setAnalytics(prev => {
-          const previousTime = prev[previousScreenId]?.timeSpentMs ?? 0
-          return {
-            ...prev,
-            [previousScreenId]: { timeSpentMs: previousTime + elapsed },
-          }
-        })
+        const previousTime = nextAnalytics[previousScreenId]?.timeSpentMs ?? 0
+        nextAnalytics = {
+          ...nextAnalytics,
+          [previousScreenId]: { timeSpentMs: previousTime + elapsed },
+        }
+        analyticsRef.current = nextAnalytics
+        setAnalytics(nextAnalytics)
       }
     }
 
@@ -199,6 +232,8 @@ export function RecusContextProvider({
       currentScreenIdRef.current = nextScreenId
       screenStartedAtRef.current = nextScreenId ? now : undefined
     }
+
+    return nextAnalytics
   }, [])
 
   const setCurrentScreenId = useCallback(
@@ -214,26 +249,38 @@ export function RecusContextProvider({
     const inputs = screen?.inputs
     if (!inputs || inputs.length === 0) return
 
-    setSubmittedValues(prev => {
-      let next: Record<string, OnboardingInputValue> | undefined
-      const liveValues = onboardingValuesRef.current
+    const liveValues = onboardingValuesRef.current
+    const prev = submittedValuesRef.current
+    let next: Record<string, OnboardingInputValue> | undefined
 
-      for (const input of inputs) {
-        const value = liveValues[input.id]
-        if (value === undefined) continue
-        if (prev[input.id] === value) continue
-        if (!next) next = { ...prev }
-        next[input.id] = value
-      }
+    for (const input of inputs) {
+      const value = liveValues[input.id]
+      if (value === undefined) continue
+      if (prev[input.id] === value) continue
+      if (!next) next = { ...prev }
+      next[input.id] = value
+    }
 
-      return next ?? prev
-    })
+    if (next) {
+      submittedValuesRef.current = next
+      setSubmittedValues(next)
+    }
   }, [])
 
   const markComplete = useCallback(() => {
-    flushScreenAnalytics(undefined)
-    setIsComplete(true)
-  }, [flushScreenAnalytics])
+    if (locallyCompleted || persistedCompletedAt) return
+    const finalAnalytics = flushScreenAnalytics(undefined)
+    setLocallyCompleted(true)
+    persistOnboardingComplete({
+      submittedValues: submittedValuesRef.current,
+      analytics: finalAnalytics,
+    })
+  }, [
+    flushScreenAnalytics,
+    locallyCompleted,
+    persistedCompletedAt,
+    persistOnboardingComplete,
+  ])
 
   const setOnboardingValue = useCallback((inputId: string, value: OnboardingInputValue) => {
     setOnboardingValues(prev => ({

@@ -117,6 +117,34 @@ const stableStringify = (value: unknown): string => {
   return JSON.stringify(sortJsonValue(value))
 }
 
+const readPersistedCompletedAt = (
+  record: AppUserOnboardingRecord | undefined,
+): string | undefined => {
+  const value = record?.metadata?.completedAt
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+// Server PATCHes that don't include `completedAt` in their body would otherwise
+// strip it from the returned record. When we already know the user has
+// completed onboarding locally, fold that flag back onto the response before
+// it lands in the store so a late analytics/screen PATCH can't resurrect the
+// onboarding overlay.
+const preserveCompletedAt = (
+  responseRecord: AppUserOnboardingRecord,
+  previousRecord: AppUserOnboardingRecord | undefined,
+): AppUserOnboardingRecord => {
+  if (readPersistedCompletedAt(responseRecord)) return responseRecord
+  const previousCompletedAt = readPersistedCompletedAt(previousRecord)
+  if (!previousCompletedAt) return responseRecord
+  return {
+    ...responseRecord,
+    metadata: {
+      ...responseRecord.metadata,
+      completedAt: previousCompletedAt,
+    },
+  }
+}
+
 // ─── The overlay layer ────────────────────────────────────────────────────────
 
 function RecusLayer() {
@@ -169,11 +197,17 @@ function RecusOnboardingPersistenceBridge({
   upsertStoredOnboardingData,
   storedOnboardingDataRef,
 }: RecusOnboardingPersistenceBridgeProps) {
-  const { isActive, user, submittedValues, analytics } = useRecus()
+  const { isActive, isComplete, user, submittedValues, analytics } = useRecus()
   const inFlightSignatureRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isActive || !user?.userId || !appUserOnboardingData) return
+
+    // Once the app user has finished onboarding (locally or per the persisted
+    // record), the SDK must stay completely silent for them — no analytics
+    // PATCH, no submission PATCH, nothing. Anything else risks resurrecting
+    // the overlay on the next session.
+    if (isComplete) return
 
     const persistedSubmittedValues = toPersistedSubmittedValues(appUserOnboardingData)
     const persistedAnalytics = toPersistedAnalytics(appUserOnboardingData)
@@ -205,8 +239,12 @@ function RecusOnboardingPersistenceBridge({
       },
     })
       .then(response => {
-        storedOnboardingDataRef.current = response.userOnboardingData
-        upsertStoredOnboardingData(user.userId, response.userOnboardingData)
+        const merged = preserveCompletedAt(
+          response.userOnboardingData,
+          storedOnboardingDataRef.current,
+        )
+        storedOnboardingDataRef.current = merged
+        upsertStoredOnboardingData(user.userId, merged)
       })
       .catch(error => {
         const errorMessage =
@@ -227,6 +265,7 @@ function RecusOnboardingPersistenceBridge({
     analytics,
     appUserOnboardingData,
     isActive,
+    isComplete,
     sdkKey,
     storedOnboardingDataRef,
     submittedValues,
@@ -476,6 +515,9 @@ export function RecusAppProvider({
       if (!normalizedUserId) return
 
       const existingRecord = storedOnboardingDataRef.current
+      // Onboarding has already been completed for this app user — do nothing.
+      if (readPersistedCompletedAt(existingRecord)) return
+
       const existingOnboardingData = existingRecord?.onboardingData ?? {}
 
       if (existingOnboardingData.currentScreenId === screenId) return
@@ -498,8 +540,12 @@ export function RecusAppProvider({
         onboardingData: { currentScreenId: screenId },
       })
         .then(response => {
-          storedOnboardingDataRef.current = response.userOnboardingData
-          upsertStoredOnboardingData(normalizedUserId, response.userOnboardingData)
+          const merged = preserveCompletedAt(
+            response.userOnboardingData,
+            storedOnboardingDataRef.current,
+          )
+          storedOnboardingDataRef.current = merged
+          upsertStoredOnboardingData(normalizedUserId, merged)
         })
         .catch(error => {
           const errorMessage =
@@ -516,6 +562,72 @@ export function RecusAppProvider({
     [normalizedUserId, sdkKey, upsertStoredOnboardingData],
   )
 
+  const persistOnboardingComplete = useCallback(
+    ({
+      submittedValues: finalSubmittedValues,
+      analytics: finalAnalytics,
+    }: {
+      submittedValues: Record<string, OnboardingInputValue>
+      analytics: RecusAnalytics
+    }) => {
+      if (!normalizedUserId) return
+
+      const existingRecord = storedOnboardingDataRef.current
+      if (readPersistedCompletedAt(existingRecord)) return
+
+      const completedAt = new Date().toISOString()
+      const nextOnboardingData = {
+        ...(existingRecord?.onboardingData ?? {}),
+        ...finalSubmittedValues,
+      }
+      const nextMetadata = {
+        ...(existingRecord?.metadata ?? {}),
+        analytics: finalAnalytics,
+        completedAt,
+      }
+
+      if (existingRecord) {
+        const optimisticRecord: AppUserOnboardingRecord = {
+          ...existingRecord,
+          onboardingData: nextOnboardingData,
+          metadata: nextMetadata,
+        }
+        storedOnboardingDataRef.current = optimisticRecord
+        upsertStoredOnboardingData(normalizedUserId, optimisticRecord)
+      }
+
+      patchAppUserOnboardingData({
+        sdkKey,
+        appUserId: normalizedUserId,
+        onboardingData: nextOnboardingData,
+        metadata: nextMetadata,
+      })
+        .then(response => {
+          const merged = preserveCompletedAt(
+            response.userOnboardingData,
+            storedOnboardingDataRef.current,
+          )
+          storedOnboardingDataRef.current = merged
+          upsertStoredOnboardingData(normalizedUserId, merged)
+          console.info('Recus onboarding marked complete', {
+            userId: normalizedUserId,
+            completedAt,
+          })
+        })
+        .catch(error => {
+          const errorMessage =
+            error instanceof Error && error.message
+              ? error.message
+              : 'Unable to mark Recus onboarding complete.'
+          console.error('Recus onboarding completion update failed', {
+            userId: normalizedUserId,
+            error: errorMessage,
+          })
+        })
+    },
+    [normalizedUserId, sdkKey, upsertStoredOnboardingData],
+  )
+
   return (
     <RecusContextProvider
       sdkKey={sdkKey}
@@ -524,6 +636,7 @@ export function RecusAppProvider({
       appUserOnboardingData={storedOnboardingData}
       isNavigationEnabled={isNavigationEnabled}
       setCurrentScreenId={setCurrentScreenId}
+      persistOnboardingComplete={persistOnboardingComplete}
     >
       {children}
       <RecusOnboardingPersistenceBridge
