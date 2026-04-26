@@ -238,7 +238,7 @@ export async function request<TResponse, TBody = unknown>({
     }
 
     if (response.ok) {
-      console.info(`[Recus API][${method}] Response`, logData)
+      console.info(`[Recus API][${method}] Response`,JSON.stringify(logData, null, 2))
     } else {
       console.error(`[Recus API][${method}] Response`, logData)
     }

@@ -15,8 +15,8 @@ const toBoolean = (value: string | undefined, fallback: boolean): boolean => {
 }
 
 export const RECUS_API_DEFAULT_CONFIG = {
-  appName: 'recus-app',
-  apiBaseUrl:  'http://localhost:4000',
+  appName: process.env.EXPO_PUBLIC_RECUS_APP_NAME ?? 'recus-app',
+  apiBaseUrl: process.env.EXPO_PUBLIC_RECUS_API_URL ?? 'https://api.recus.app',
   timeoutMs: toPositiveNumber(process.env.EXPO_PUBLIC_RECUS_API_TIMEOUT_MS, 15000),
   enableLogging: toBoolean(process.env.EXPO_PUBLIC_RECUS_API_ENABLE_LOGGING, true),
   sdkKeyHeader: process.env.EXPO_PUBLIC_RECUS_SDK_KEY_HEADER ?? 'x-sdk-key',
@@ -31,6 +31,5 @@ let recusSdkKey: string | undefined
 export const setRecusSdkKey = (sdkKey?: string) => {
   recusSdkKey = sdkKey
 }
- 
+
 export const getRecusSdkKey = () => recusSdkKey
-  

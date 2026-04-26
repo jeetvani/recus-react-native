@@ -17,6 +17,8 @@ export type AppOnboardingTransition = {
   backAllowed?: boolean
 }
 
+export type AppOnboardingUi = Record<string, unknown>
+
 export type AppOnboardingScreenConfig = {
   id: string
   title?: string
@@ -24,6 +26,8 @@ export type AppOnboardingScreenConfig = {
   html?: boolean
   inputs?: AppOnboardingInputConfig[]
   transitions?: AppOnboardingTransition[]
+  ui?: AppOnboardingUi | null
+  conditions?: Record<string, unknown> | null
 }
 
 export type AppOnboardingData = {
@@ -88,6 +92,8 @@ const toScreenConfig = (value: unknown): AppOnboardingScreenConfig | null => {
     transitions: rawTransitions
       .map(toTransition)
       .filter((transition): transition is AppOnboardingTransition => !!transition),
+    ui: isRecord(value.ui) ? (value.ui as AppOnboardingUi) : null,
+    conditions: isRecord(value.conditions) ? (value.conditions as Record<string, unknown>) : null,
   }
 }
 

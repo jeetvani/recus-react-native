@@ -41,6 +41,7 @@ export type {
   AppOnboardingInputType,
   AppOnboardingScreenConfig,
   AppOnboardingTransition,
+  AppOnboardingUi,
 } from './api/appOnboarding'
 export type {
   AppUserOnboardingRecord,

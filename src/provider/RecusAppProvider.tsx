@@ -155,6 +155,7 @@ function RecusLayer() {
     isNavigationEnabled,
     screens,
     initialRoute,
+    setCurrentScreenId,
   } = useRecus()
   const opacity = useRef(new Animated.Value(0)).current
   const shouldShow = isNavigationEnabled && isActive && !isComplete && isOnboardingReady
@@ -176,7 +177,11 @@ function RecusLayer() {
 
   return (
     <Animated.View style={[StyleSheet.absoluteFillObject, { opacity }]}>
-      <RecusNavigator screens={screens} initialRoute={initialRoute} />
+      <RecusNavigator
+        screens={screens}
+        initialRoute={initialRoute}
+        onRouteChange={setCurrentScreenId}
+      />
     </Animated.View>
   )
 }
@@ -226,15 +231,20 @@ function RecusOnboardingPersistenceBridge({
 
     inFlightSignatureRef.current = desiredSignature
 
+    const latestRecord = storedOnboardingDataRef.current ?? appUserOnboardingData
+    const latestOnboardingData = latestRecord?.onboardingData ?? {}
+    const latestMetadata = latestRecord?.metadata ?? {}
+    const nextOnboardingData = {
+      ...latestOnboardingData,
+      ...submittedValues,
+    }
+
     patchAppUserOnboardingData({
       sdkKey,
       appUserId: user.userId,
-      onboardingData: {
-        ...appUserOnboardingData.onboardingData,
-        ...submittedValues,
-      },
+      onboardingData: nextOnboardingData,
       metadata: {
-        ...appUserOnboardingData.metadata,
+        ...latestMetadata,
         analytics,
       },
     })
@@ -522,13 +532,15 @@ export function RecusAppProvider({
 
       if (existingOnboardingData.currentScreenId === screenId) return
 
+      const nextOnboardingData = {
+        ...existingOnboardingData,
+        currentScreenId: screenId,
+      }
+
       if (existingRecord) {
         const optimisticRecord = {
           ...existingRecord,
-          onboardingData: {
-            ...existingOnboardingData,
-            currentScreenId: screenId,
-          },
+          onboardingData: nextOnboardingData,
         }
         storedOnboardingDataRef.current = optimisticRecord
         upsertStoredOnboardingData(normalizedUserId, optimisticRecord)
@@ -537,7 +549,7 @@ export function RecusAppProvider({
       patchAppUserOnboardingData({
         sdkKey,
         appUserId: normalizedUserId,
-        onboardingData: { currentScreenId: screenId },
+        onboardingData: nextOnboardingData,
       })
         .then(response => {
           const merged = preserveCompletedAt(

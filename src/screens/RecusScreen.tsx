@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Switch,
 } from 'react-native'
 import { AppOnboardingScreenConfig } from '../api/appOnboarding'
+import { RecusUiEngine } from '../components/recus-ui-engine'
 import { useRecus } from '../context/RecusContext'
 import { useRecusNavigation } from '../navigation/RecusNavigator'
 
@@ -31,7 +32,6 @@ export default function RecusScreen({ config }: RecusScreenProps) {
     markComplete,
     onboardingValues,
     setOnboardingValue,
-    setCurrentScreenId,
     submitScreen,
   } = useRecus()
   const { navigate, goBack } = useRecusNavigation()
@@ -39,9 +39,13 @@ export default function RecusScreen({ config }: RecusScreenProps) {
   const nextTransition = transitions[0]
   const canGoBack = transitions.some(transition => transition.backAllowed)
 
-  useEffect(() => {
-    setCurrentScreenId(config.id)
-  }, [config.id, setCurrentScreenId])
+  if (config.ui && typeof config.ui === 'object') {
+    return (
+      <View style={styles.engineRoot}>
+        <RecusUiEngine UI={config.ui} />
+      </View>
+    )
+  }
 
   const validateInputs = (): boolean => {
     for (const input of config.inputs ?? []) {
@@ -157,6 +161,9 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  engineRoot: {
+    flex: 1,
   },
   container: {
     flex: 1,

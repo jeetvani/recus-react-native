@@ -37,7 +37,8 @@ const toOnboardingValues = (
       string,
       OnboardingInputValue,
     ] => {
-      const [, value] = entry
+      const [key, value] = entry
+      if (key === 'currentScreenId') return false
       return typeof value === 'string' || typeof value === 'boolean'
     }),
   )

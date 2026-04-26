@@ -46,6 +46,7 @@ type TransitionState =
 type RecusNavigatorProps = {
   screens: RecusScreenConfig[]
   initialRoute: string
+  onRouteChange?: (screenId: string) => void
 }
 
 // ─── Navigator ────────────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ type RecusNavigatorProps = {
 export default function RecusNavigator({
   screens,
   initialRoute,
+  onRouteChange,
 }: RecusNavigatorProps) {
   const { width } = useWindowDimensions()
   const [stack, setStack] = useState<string[]>([initialRoute])
@@ -72,6 +74,10 @@ export default function RecusNavigator({
   }, [screens])
 
   const currentRoute = stack[stack.length - 1]
+
+  useEffect(() => {
+    onRouteChange?.(currentRoute)
+  }, [currentRoute, onRouteChange])
 
   useEffect(() => {
     setStack([initialRoute])
