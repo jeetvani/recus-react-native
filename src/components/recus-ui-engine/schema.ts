@@ -10,8 +10,15 @@ import {
   RecusUiCanvas,
   RecusUiGradientStop,
   RecusUiImageBackground,
+  RecusUiImageCrop,
   RecusUiImageFit,
+  RecusUiImageLayer,
+  RecusUiImageLayerStyle,
   RecusUiImagePosition,
+  RecusUiImageShape,
+  RecusUiInputLayer,
+  RecusUiInputLayerStyle,
+  RecusUiInputType,
   RecusUiLayer,
   RecusUiLayerDimension,
   RecusUiLayerLayout,
@@ -79,12 +86,27 @@ const ALLOWED_BUTTON_VARIANTS: RecusUiButtonVariant[] = [
 
 const ALLOWED_LAYER_POSITIONS: RecusUiLayerPosition[] = ['freeform', 'flow']
 
+const ALLOWED_IMAGE_SHAPES: RecusUiImageShape[] = [
+  'rectangle',
+  'rounded',
+  'circle',
+]
+
 const ALLOWED_FONT_WEIGHTS: RecusUiButtonFontWeight[] = [
   '400',
   '500',
   '600',
   '700',
   '800',
+]
+
+const ALLOWED_INPUT_TYPES: RecusUiInputType[] = [
+  'text',
+  'password',
+  'email',
+  'number',
+  'phone',
+  'url',
 ]
 
 const DEFAULT_BUTTON_LAYOUT: RecusUiLayerLayout = {
@@ -109,6 +131,45 @@ const DEFAULT_BUTTON_STYLE: RecusUiButtonStyle = {
   fontWeight: '500',
 }
 
+const DEFAULT_IMAGE_LAYOUT: RecusUiLayerLayout = {
+  position: 'freeform',
+  x: '25%',
+  y: '25%',
+  width: '50%',
+  height: 200,
+  zIndex: 1,
+}
+
+const DEFAULT_IMAGE_STYLE: RecusUiImageLayerStyle = {
+  opacity: 1,
+  objectFit: 'cover',
+  borderColor: '#000000',
+  borderWidth: 0,
+  borderRadius: 0,
+  objectPosition: 'center',
+}
+
+const DEFAULT_INPUT_LAYOUT: RecusUiLayerLayout = {
+  position: 'freeform',
+  x: '10%',
+  y: '45%',
+  width: '80%',
+  height: 48,
+  zIndex: 1,
+}
+
+const DEFAULT_INPUT_STYLE: RecusUiInputLayerStyle = {
+  fontSize: 14,
+  labelSize: 12,
+  textColor: '#111827',
+  labelColor: '#374151',
+  borderColor: '#E5E7EB',
+  borderWidth: 1,
+  borderRadius: 8,
+  backgroundColor: '#FFFFFF',
+  placeholderColor: '#9CA3AF',
+}
+
 const toImageFit = (value: unknown): RecusUiImageFit | undefined => {
   return typeof value === 'string' && (ALLOWED_FIT_VALUES as string[]).includes(value)
     ? (value as RecusUiImageFit)
@@ -119,6 +180,12 @@ const toImagePosition = (value: unknown): RecusUiImagePosition | undefined => {
   return typeof value === 'string' &&
     (ALLOWED_POSITION_VALUES as string[]).includes(value)
     ? (value as RecusUiImagePosition)
+    : undefined
+}
+
+const toImageShape = (value: unknown): RecusUiImageShape | undefined => {
+  return typeof value === 'string' && (ALLOWED_IMAGE_SHAPES as string[]).includes(value)
+    ? (value as RecusUiImageShape)
     : undefined
 }
 
@@ -232,6 +299,13 @@ const toFontWeight = (value: unknown): RecusUiButtonFontWeight => {
     : DEFAULT_BUTTON_STYLE.fontWeight
 }
 
+const toInputType = (value: unknown): RecusUiInputType => {
+  return typeof value === 'string' &&
+    (ALLOWED_INPUT_TYPES as string[]).includes(value)
+    ? (value as RecusUiInputType)
+    : 'text'
+}
+
 const toShadow = (value: unknown): RecusUiShadow | null | undefined => {
   if (value === null) return null
   if (!isRecord(value)) return undefined
@@ -244,17 +318,49 @@ const toShadow = (value: unknown): RecusUiShadow | null | undefined => {
   }
 }
 
-const toButtonLayout = (value: unknown): RecusUiLayerLayout => {
-  if (!isRecord(value)) return DEFAULT_BUTTON_LAYOUT
+const toLayerLayout = (
+  value: unknown,
+  fallback: RecusUiLayerLayout,
+): RecusUiLayerLayout => {
+  if (!isRecord(value)) return fallback
 
   return {
     position: toLayerPosition(value.position),
-    x: isPercentString(value.x) ? value.x : DEFAULT_BUTTON_LAYOUT.x,
-    y: isPercentString(value.y) ? value.y : DEFAULT_BUTTON_LAYOUT.y,
-    width: toLayerDimension(value.width, DEFAULT_BUTTON_LAYOUT.width),
-    height: toLayerDimension(value.height, DEFAULT_BUTTON_LAYOUT.height),
-    zIndex: toFiniteNumber(value.zIndex) ?? DEFAULT_BUTTON_LAYOUT.zIndex,
+    x: isPercentString(value.x) ? value.x : fallback.x,
+    y: isPercentString(value.y) ? value.y : fallback.y,
+    width: toLayerDimension(value.width, fallback.width),
+    height: toLayerDimension(value.height, fallback.height),
+    zIndex: toFiniteNumber(value.zIndex) ?? fallback.zIndex,
   }
+}
+
+const toButtonLayout = (value: unknown): RecusUiLayerLayout => {
+  return toLayerLayout(value, DEFAULT_BUTTON_LAYOUT)
+}
+
+const toImageLayout = (value: unknown): RecusUiLayerLayout => {
+  return toLayerLayout(value, DEFAULT_IMAGE_LAYOUT)
+}
+
+const toInputLayout = (value: unknown): RecusUiLayerLayout => {
+  return toLayerLayout(value, DEFAULT_INPUT_LAYOUT)
+}
+
+const toImageCrop = (value: unknown): RecusUiImageCrop | undefined => {
+  if (!isRecord(value)) return undefined
+
+  return {
+    top: toNonNegativeNumber(value.top) ?? 0,
+    left: toNonNegativeNumber(value.left) ?? 0,
+    right: toNonNegativeNumber(value.right) ?? 0,
+    bottom: toNonNegativeNumber(value.bottom) ?? 0,
+  }
+}
+
+const toAspectRatio = (value: unknown): RecusUiImageLayerStyle['aspectRatio'] => {
+  if (value === 'free') return 'free'
+  const numberValue = toNonNegativeNumber(value)
+  return numberValue && numberValue > 0 ? numberValue : undefined
 }
 
 const toButtonStyle = (value: unknown): RecusUiButtonStyle => {
@@ -275,6 +381,50 @@ const toButtonStyle = (value: unknown): RecusUiButtonStyle => {
     fontSize: toNonNegativeNumber(value.fontSize) ?? DEFAULT_BUTTON_STYLE.fontSize,
     fontWeight: toFontWeight(value.fontWeight),
     shadow,
+  }
+}
+
+const toImageStyle = (value: unknown): RecusUiImageLayerStyle => {
+  if (!isRecord(value)) return DEFAULT_IMAGE_STYLE
+
+  return {
+    crop: toImageCrop(value.crop),
+    shape: toImageShape(value.shape),
+    opacity: Math.min(1, toNonNegativeNumber(value.opacity) ?? DEFAULT_IMAGE_STYLE.opacity),
+    objectFit: toImageFit(value.objectFit) ?? DEFAULT_IMAGE_STYLE.objectFit,
+    aspectRatio: toAspectRatio(value.aspectRatio),
+    borderColor: isHexColor(value.borderColor)
+      ? value.borderColor
+      : DEFAULT_IMAGE_STYLE.borderColor,
+    borderWidth: toNonNegativeNumber(value.borderWidth) ?? DEFAULT_IMAGE_STYLE.borderWidth,
+    borderRadius: toNonNegativeNumber(value.borderRadius) ?? DEFAULT_IMAGE_STYLE.borderRadius,
+    objectPosition: toImagePosition(value.objectPosition) ?? DEFAULT_IMAGE_STYLE.objectPosition,
+  }
+}
+
+const toInputStyle = (value: unknown): RecusUiInputLayerStyle => {
+  if (!isRecord(value)) return DEFAULT_INPUT_STYLE
+
+  return {
+    fontSize: toNonNegativeNumber(value.fontSize) ?? DEFAULT_INPUT_STYLE.fontSize,
+    labelSize: toNonNegativeNumber(value.labelSize) ?? DEFAULT_INPUT_STYLE.labelSize,
+    textColor: isHexColor(value.textColor)
+      ? value.textColor
+      : DEFAULT_INPUT_STYLE.textColor,
+    labelColor: isHexColor(value.labelColor)
+      ? value.labelColor
+      : DEFAULT_INPUT_STYLE.labelColor,
+    borderColor: isHexColor(value.borderColor)
+      ? value.borderColor
+      : DEFAULT_INPUT_STYLE.borderColor,
+    borderWidth: toNonNegativeNumber(value.borderWidth) ?? DEFAULT_INPUT_STYLE.borderWidth,
+    borderRadius: toNonNegativeNumber(value.borderRadius) ?? DEFAULT_INPUT_STYLE.borderRadius,
+    backgroundColor: isHexColor(value.backgroundColor)
+      ? value.backgroundColor
+      : DEFAULT_INPUT_STYLE.backgroundColor,
+    placeholderColor: isHexColor(value.placeholderColor)
+      ? value.placeholderColor
+      : DEFAULT_INPUT_STYLE.placeholderColor,
   }
 }
 
@@ -334,10 +484,48 @@ const toButtonLayer = (value: Record<string, unknown>, index: number): RecusUiBu
   }
 }
 
+const toImageLayer = (value: Record<string, unknown>, index: number): RecusUiImageLayer | null => {
+  if (value.type !== 'image') return null
+  if (!isRecord(value.source)) return null
+
+  const url = toString(value.source.url)
+  if (!url) return null
+
+  return {
+    id: toString(value.id) ?? `image-${index + 1}`,
+    type: 'image',
+    alt: toString(value.alt),
+    source: {
+      url,
+      type: toString(value.source.type),
+    },
+    layout: toImageLayout(value.layout),
+    style: toImageStyle(value.style),
+  }
+}
+
+const toInputLayer = (value: Record<string, unknown>, index: number): RecusUiInputLayer | null => {
+  if (value.type !== 'input') return null
+
+  const id = toString(value.id) ?? `input-${index + 1}`
+
+  return {
+    id,
+    type: 'input',
+    label: toString(value.label),
+    fieldId: toString(value.fieldId) ?? id,
+    required: typeof value.required === 'boolean' ? value.required : false,
+    inputType: toInputType(value.inputType),
+    placeholder: toString(value.placeholder),
+    layout: toInputLayout(value.layout),
+    style: toInputStyle(value.style),
+  }
+}
+
 const toLayer = (value: unknown, index: number): RecusUiLayer | null => {
   if (!isRecord(value)) return null
 
-  return toButtonLayer(value, index)
+  return toButtonLayer(value, index) ?? toImageLayer(value, index) ?? toInputLayer(value, index)
 }
 
 const toLayers = (value: unknown): RecusUiLayer[] => {

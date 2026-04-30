@@ -86,25 +86,29 @@ export default function RecusNavigator({
     animating.current = false
   }, [initialRoute, progress])
 
+  // ─── Pre-mount-then-animate ─────────────────────────────────────────
+  //
+  // The naive sequence (commit + animate in the same tick) makes React
+  // commit the new screen, mount its `RecusUiEngine`, decode its image
+  // background, AND start an Animated.timing in the same frame. The JS
+  // thread is busy with the mount work while the slide animation is
+  // already running, which causes the visible jitter when navigating to
+  // a custom-UI screen for the first time.
+  //
+  // Instead, `navigate` / `goBack` only set the *transition state* (which
+  // triggers React to render the next screen offscreen at progress = 0).
+  // A single `useEffect` watches that state and starts the actual slide
+  // animation on the *next* RAF, after React's commit phase has flushed
+  // and the native side has had one paint to mount/decode the new view.
   const navigate = useCallback(
     (screenId: string) => {
       if (animating.current || !screenMap[screenId]) return
       animating.current = true
 
       const from = stack[stack.length - 1]
+      progress.setValue(0)
       setStack(prev => [...prev, screenId])
       setTransition({ type: 'push', from, to: screenId })
-      progress.setValue(0)
-
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 350,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start(() => {
-        setTransition({ type: 'idle' })
-        animating.current = false
-      })
     },
     [stack, screenMap, progress],
   )
@@ -115,20 +119,43 @@ export default function RecusNavigator({
 
     const from = stack[stack.length - 1]
     const to = stack[stack.length - 2]
-    setTransition({ type: 'pop', from, to })
     progress.setValue(0)
-
-    Animated.timing(progress, {
-      toValue: 1,
-      duration: 300,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: true,
-    }).start(() => {
-      setStack(prev => prev.slice(0, -1))
-      setTransition({ type: 'idle' })
-      animating.current = false
-    })
+    setTransition({ type: 'pop', from, to })
   }, [stack, progress])
+
+  useEffect(() => {
+    if (transition.type === 'idle') return
+
+    const isPush = transition.type === 'push'
+    let cancelled = false
+
+    // Wait one frame so React's commit and the native side's first paint
+    // (mount + image decode of the new screen at translateX = ±width) have
+    // completed before the slide kicks off. This keeps the animation a
+    // pure native-driver transform on already-rendered views.
+    const rafId = requestAnimationFrame(() => {
+      if (cancelled) return
+
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: isPush ? 350 : 300,
+        easing: isPush ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (cancelled || !finished) return
+        if (!isPush) {
+          setStack(prev => prev.slice(0, -1))
+        }
+        setTransition({ type: 'idle' })
+        animating.current = false
+      })
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(rafId)
+    }
+  }, [progress, transition])
 
   const ctx = useMemo(
     () => ({ navigate, goBack, currentRoute }),

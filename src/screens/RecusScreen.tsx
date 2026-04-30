@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useCallback, useMemo } from 'react'
 import {
   View,
   Text,
@@ -9,8 +9,12 @@ import {
   TextInput,
   Switch,
 } from 'react-native'
-import { AppOnboardingScreenConfig } from '../api/appOnboarding'
-import { RecusUiEngine } from '../components/recus-ui-engine'
+import {
+  AppOnboardingInputConfig,
+  AppOnboardingInputType,
+  AppOnboardingScreenConfig,
+} from '../api/appOnboarding'
+import { RecusEngineActions, RecusUiEngine } from '../components/recus-ui-engine'
 import { useRecus } from '../context/RecusContext'
 import { useRecusNavigation } from '../navigation/RecusNavigator'
 
@@ -19,6 +23,28 @@ import { useRecusNavigation } from '../navigation/RecusNavigator'
 export type RecusScreenConfig = AppOnboardingScreenConfig
 
 const BOOLEAN_INPUT_TYPE = 'boolean' as const
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const PHONE_PATTERN = /^\+?[\d\s().-]{7,}$/
+const URL_PATTERN = /^https?:\/\/\S+\.\S+$/
+
+const getInputLabel = (input: AppOnboardingInputConfig): string => {
+  return input.label.trim() || input.placeholder?.trim() || input.id
+}
+
+const getKeyboardType = (inputType: AppOnboardingInputType) => {
+  switch (inputType) {
+    case 'email':
+      return 'email-address'
+    case 'number':
+      return 'numeric'
+    case 'phone':
+      return 'phone-pad'
+    case 'url':
+      return 'url'
+    default:
+      return 'default'
+  }
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -38,41 +64,72 @@ export default function RecusScreen({ config }: RecusScreenProps) {
   const transitions = config.transitions ?? []
   const nextTransition = transitions[0]
   const canGoBack = transitions.some(transition => transition.backAllowed)
-
-  if (config.ui && typeof config.ui === 'object') {
-    return (
-      <View style={styles.engineRoot}>
-        <RecusUiEngine UI={config.ui} />
-      </View>
+  const inputRules = useMemo(() => {
+    return Object.fromEntries(
+      (config.inputs ?? []).map(input => [
+        input.id,
+        { maxLength: input.maxLength },
+      ]),
     )
-  }
+  }, [config.inputs])
 
-  const validateInputs = (): boolean => {
+  const validateInputs = useCallback((): boolean => {
     for (const input of config.inputs ?? []) {
-      if (input.type === BOOLEAN_INPUT_TYPE) continue
+      const label = getInputLabel(input)
+
+      if (input.type === BOOLEAN_INPUT_TYPE) {
+        if (input.required && onboardingValues[input.id] !== true) {
+          Alert.alert('Incomplete Details', `${label} is required.`)
+          return false
+        }
+        continue
+      }
 
       const rawValue = onboardingValues[input.id]
       const value = typeof rawValue === 'string' ? rawValue.trim() : ''
 
+      if (input.required && value.length === 0) {
+        Alert.alert('Incomplete Details', `${label} is required.`)
+        return false
+      }
+
+      if (value.length === 0) continue
+
       if (input.minLength && value.length < input.minLength) {
-        Alert.alert('Incomplete Details', `${input.label} must be at least ${input.minLength} characters.`)
+        Alert.alert('Incomplete Details', `${label} must be at least ${input.minLength} characters.`)
         return false
       }
 
       if (input.maxLength && value.length > input.maxLength) {
-        Alert.alert('Invalid Details', `${input.label} must be at most ${input.maxLength} characters.`)
+        Alert.alert('Invalid Details', `${label} must be at most ${input.maxLength} characters.`)
+        return false
+      }
+
+      if (input.type === 'email' && !EMAIL_PATTERN.test(value)) {
+        Alert.alert('Invalid Details', `${label} must be a valid email address.`)
+        return false
+      }
+
+      if (input.type === 'number' && !Number.isFinite(Number(value))) {
+        Alert.alert('Invalid Details', `${label} must be a valid number.`)
+        return false
+      }
+
+      if (input.type === 'phone' && !PHONE_PATTERN.test(value)) {
+        Alert.alert('Invalid Details', `${label} must be a valid phone number.`)
+        return false
+      }
+
+      if (input.type === 'url' && !URL_PATTERN.test(value)) {
+        Alert.alert('Invalid Details', `${label} must be a valid URL.`)
         return false
       }
     }
 
     return true
-  }
+  }, [config.inputs, onboardingValues])
 
-  const handleContinue = () => {
-    if (!validateInputs()) return
-
-    submitScreen(config.id)
-
+  const advanceToNext = useCallback(() => {
     if (nextTransition?.to) {
       navigate(nextTransition.to)
       return
@@ -83,6 +140,38 @@ export default function RecusScreen({ config }: RecusScreenProps) {
       responses: onboardingValues,
     })
     markComplete()
+  }, [config.id, markComplete, navigate, nextTransition?.to, onboardingValues])
+
+  const handleContinue = useCallback(() => {
+    if (!validateInputs()) return
+
+    submitScreen(config.id)
+    advanceToNext()
+  }, [advanceToNext, config.id, submitScreen, validateInputs])
+
+  const handleSkip = useCallback(() => {
+    advanceToNext()
+  }, [advanceToNext])
+
+  // Engine actions also carry live input state so freeform input layers can
+  // update the same response store used by validation and submission.
+  const engineActions = useMemo<RecusEngineActions>(
+    () => ({
+      onContinue: handleContinue,
+      onSkip: handleSkip,
+      values: onboardingValues,
+      inputRules,
+      onInputChange: setOnboardingValue,
+    }),
+    [handleContinue, handleSkip, inputRules, onboardingValues, setOnboardingValue],
+  )
+
+  if (config.ui && typeof config.ui === 'object') {
+    return (
+      <View style={styles.engineRoot}>
+        <RecusUiEngine UI={config.ui} actions={engineActions} />
+      </View>
+    )
   }
 
   const resolveText = (text?: string): string | undefined => {
@@ -134,7 +223,15 @@ export default function RecusScreen({ config }: RecusScreenProps) {
                 placeholderTextColor="#9CA3AF"
                 style={styles.input}
                 secureTextEntry={input.type === 'password'}
-                autoCapitalize="none"
+                keyboardType={getKeyboardType(input.type)}
+                autoCapitalize={
+                  input.type === 'email' ||
+                  input.type === 'password' ||
+                  input.type === 'url'
+                    ? 'none'
+                    : 'sentences'
+                }
+                autoCorrect={input.type === 'text'}
                 maxLength={input.maxLength}
               />
             </View>

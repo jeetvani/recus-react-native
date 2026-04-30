@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { memo, useMemo } from 'react'
 import {
   GestureResponderEvent,
   Pressable,
@@ -16,6 +16,10 @@ import {
   RecusUiGradientStop,
   RecusUiLayerDimension,
 } from '../types'
+import {
+  RECUS_ENGINE_ACTION_IDS,
+  useRecusEngineActions,
+} from '../actions'
 
 type RecusEngineButtonProps = {
   layer: RecusUiButtonLayer
@@ -50,9 +54,10 @@ const isLinearGradientBackground = (
   return background.type === 'linear-gradient'
 }
 
-export function RecusEngineButton({ layer }: RecusEngineButtonProps) {
+function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
   const { layout, style } = layer
   const disabled = layer.disabled === true
+  const { onContinue, onSkip } = useRecusEngineActions()
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     const shadowStyle = style.shadow
@@ -106,6 +111,19 @@ export function RecusEngineButton({ layer }: RecusEngineButtonProps) {
   }, [style])
 
   const handlePress = (_event: GestureResponderEvent) => {
+    // Reserved layer ids drive the host-supplied onboarding actions so the
+    // same UI schema can express both "Continue" (validate + advance) and
+    // "Skip" (advance without validation) flows.
+    if (layer.id === RECUS_ENGINE_ACTION_IDS.continue) {
+      onContinue()
+      return
+    }
+
+    if (layer.id === RECUS_ENGINE_ACTION_IDS.skip) {
+      onSkip()
+      return
+    }
+
     // `events.onTap` is stored for the runtime action system; execution is not wired yet.
   }
 
@@ -135,6 +153,14 @@ export function RecusEngineButton({ layer }: RecusEngineButtonProps) {
     </View>
   )
 }
+
+/**
+ * Memoised so a button only re-renders when its layer reference changes.
+ * `RecusUiEngine` memoises the parsed schema, so layer references are
+ * stable across host re-renders (e.g. text input keystrokes), and this
+ * memo lets us skip the entire layer subtree in that case.
+ */
+export const RecusEngineButton = memo(RecusEngineButtonImpl)
 
 function ButtonGradient({
   background,

@@ -1,11 +1,6 @@
-import React from 'react'
-import {
-  ImageBackground as RNImageBackground,
-  ImageResizeMode,
-  ImageStyle,
-  StyleSheet,
-  ViewStyle,
-} from 'react-native'
+import React, { useMemo } from 'react'
+import { StyleSheet, ViewStyle } from 'react-native'
+import { ImageBackground as ExpoImageBackground } from 'expo-image'
 import {
   RecusUiImageBackground,
   RecusUiImageFit,
@@ -18,42 +13,54 @@ type ImageBackgroundProps = {
   children?: React.ReactNode
 }
 
-const fitToResizeMode = (fit: RecusUiImageFit | undefined): ImageResizeMode => {
+type ExpoContentFit = 'cover' | 'contain' | 'fill' | 'none' | 'scale-down'
+type ExpoContentPosition =
+  | 'center'
+  | 'top'
+  | 'right'
+  | 'bottom'
+  | 'left'
+  | 'top right'
+  | 'top left'
+  | 'bottom right'
+  | 'bottom left'
+
+const fitToContentFit = (fit: RecusUiImageFit | undefined): ExpoContentFit => {
   switch (fit) {
     case 'contain':
-      return 'contain'
     case 'fill':
-      return 'stretch'
     case 'none':
     case 'scale-down':
-      return 'center'
+      return fit
     case 'cover':
     default:
       return 'cover'
   }
 }
 
-/**
- * Best-effort mapping of CSS background-position keywords onto the
- * native image. React Native's Image does not directly support
- * `object-position`, so for non-default positions we shift the image
- * inside its container while keeping `cover` resize behavior.
- */
-const positionToImageStyle = (
+const positionToContentPosition = (
   position: RecusUiImagePosition | undefined,
-): ImageStyle => {
+): ExpoContentPosition => {
   switch (position) {
     case 'top':
-      return { resizeMode: 'cover', alignSelf: 'flex-start' }
+      return 'top'
     case 'bottom':
-      return { resizeMode: 'cover', alignSelf: 'flex-end' }
+      return 'bottom'
     case 'left':
-      return { resizeMode: 'cover' }
+      return 'left'
     case 'right':
-      return { resizeMode: 'cover' }
+      return 'right'
+    case 'top-left':
+      return 'top left'
+    case 'top-right':
+      return 'top right'
+    case 'bottom-left':
+      return 'bottom left'
+    case 'bottom-right':
+      return 'bottom right'
     case 'center':
     default:
-      return {}
+      return 'center'
   }
 }
 
@@ -63,18 +70,29 @@ export function ImageBackground({
   children,
 }: ImageBackgroundProps) {
   const { image } = background
-  const resizeMode = fitToResizeMode(image.fit)
-  const positionStyle = positionToImageStyle(image.position)
+
+  // Stable source object so `expo-image` doesn't see a new reference and
+  // re-trigger any internal load logic on parent re-renders.
+  const source = useMemo(() => ({ uri: image.url }), [image.url])
+  const contentFit = useMemo(() => fitToContentFit(image.fit), [image.fit])
+  const contentPosition = useMemo(
+    () => positionToContentPosition(image.position),
+    [image.position],
+  )
 
   return (
-    <RNImageBackground
-      source={{ uri: image.url }}
-      resizeMode={resizeMode}
+    <ExpoImageBackground
+      source={source}
+      contentFit={contentFit}
+      contentPosition={contentPosition}
+      cachePolicy="memory-disk"
+      priority="high"
+      transition={0}
+      recyclingKey={image.url}
       style={[styles.fill, style]}
-      imageStyle={positionStyle}
     >
       {children}
-    </RNImageBackground>
+    </ExpoImageBackground>
   )
 }
 

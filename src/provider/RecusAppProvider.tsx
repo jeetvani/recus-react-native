@@ -16,6 +16,7 @@ import {
 } from '../api/appUserOnboardingData'
 import { createAppUser, CreateAppUserInput } from '../api/appUsers'
 import { setRecusSdkKey } from '../common'
+import { prefetchFlowAssets } from '../components/recus-ui-engine'
 import RecusNavigator from '../navigation/RecusNavigator'
 import { useAppUserOnboardingDataStore } from '../store/appUserOnboardingDataStore'
 import { useRecusUsersStore } from '../store/recusUsersStore'
@@ -353,6 +354,13 @@ export function RecusAppProvider({
 
         currentStep = 'fetch onboarding flow'
         const nextOnboardingFlow = await getAppOnboarding({ sdkKey })
+
+        if (!isMounted) return
+
+        currentStep = 'prefetch onboarding assets'
+        // Warm every referenced image before publishing the flow to context so
+        // screen rendering starts with the image cache already populated.
+        await prefetchFlowAssets(nextOnboardingFlow)
 
         if (!isMounted) return
 

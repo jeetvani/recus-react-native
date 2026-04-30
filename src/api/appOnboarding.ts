@@ -1,12 +1,20 @@
 import { appSdkRequest, JsonObject } from './client'
 import { apiRoutes } from './routes'
 
-export type AppOnboardingInputType = 'text' | 'password' | 'boolean'
+export type AppOnboardingInputType =
+  | 'text'
+  | 'password'
+  | 'boolean'
+  | 'email'
+  | 'number'
+  | 'phone'
+  | 'url'
 
 export type AppOnboardingInputConfig = {
   id: string
   label: string
   type: AppOnboardingInputType
+  required: boolean
   placeholder?: string
   maxLength?: number
   minLength?: number
@@ -52,7 +60,18 @@ const toNumberOrUndefined = (value: unknown): number | undefined => {
 }
 
 const toInputType = (value: unknown): AppOnboardingInputType => {
-  return value === 'password' || value === 'boolean' ? value : 'text'
+  if (
+    value === 'password' ||
+    value === 'boolean' ||
+    value === 'email' ||
+    value === 'number' ||
+    value === 'phone' ||
+    value === 'url'
+  ) {
+    return value
+  }
+
+  return 'text'
 }
 
 const toInputConfig = (value: unknown): AppOnboardingInputConfig | null => {
@@ -62,6 +81,7 @@ const toInputConfig = (value: unknown): AppOnboardingInputConfig | null => {
     id: value.id,
     label: typeof value.label === 'string' ? value.label : value.id,
     type: toInputType(value.type),
+    required: typeof value.required === 'boolean' ? value.required : false,
     placeholder: typeof value.placeholder === 'string' ? value.placeholder : undefined,
     maxLength: toNumberOrUndefined(value.maxLength),
     minLength: toNumberOrUndefined(value.minLength),

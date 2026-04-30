@@ -1,12 +1,14 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
+import { RecusEngineActions, RecusEngineActionsProvider } from './actions'
 import { BackgroundRenderer } from './backgrounds'
-import { RecusEngineButton } from './layers'
+import { RecusEngineButton, RecusEngineImage, RecusEngineInput } from './layers'
 import { normalizeRecusUi } from './schema'
-import { RecusUi, isButtonLayer } from './types'
+import { RecusUi, isButtonLayer, isImageLayer, isInputLayer } from './types'
 
 type RecusUiEngineProps = {
   UI: RecusUi
+  actions?: RecusEngineActions
 }
 
 /**
@@ -17,8 +19,14 @@ type RecusUiEngineProps = {
  *  - Render the configured background (gradient / solid / image).
  *  - Render supported layers on top of the background.
  */
-export function RecusUiEngine({ UI }: RecusUiEngineProps) {
-  const schema = normalizeRecusUi(UI)
+export function RecusUiEngine({ UI, actions }: RecusUiEngineProps) {
+  // Parse once per UI reference. The onboarding flow is fetched once and
+  // each screen's `ui` is referentially stable, so this memo prevents the
+  // entire schema walk from running on every parent re-render (e.g. each
+  // keystroke in the host screen). It also stabilises `schema.background`
+  // and per-layer `style`/`layout` references, which makes the existing
+  // `useMemo`s inside layer renderers actually pay off.
+  const schema = useMemo(() => normalizeRecusUi(UI), [UI])
 
   if (!schema) {
     return (
@@ -31,7 +39,7 @@ export function RecusUiEngine({ UI }: RecusUiEngineProps) {
     )
   }
 
-  return (
+  const tree = (
     <BackgroundRenderer background={schema.background} style={styles.fill}>
       <View style={styles.layerRoot} pointerEvents="box-none">
         {schema.layers.map(layer => {
@@ -39,10 +47,26 @@ export function RecusUiEngine({ UI }: RecusUiEngineProps) {
             return <RecusEngineButton key={layer.id} layer={layer} />
           }
 
+          if (isImageLayer(layer)) {
+            return <RecusEngineImage key={layer.id} layer={layer} />
+          }
+
+          if (isInputLayer(layer)) {
+            return <RecusEngineInput key={layer.id} layer={layer} />
+          }
+
           return null
         })}
       </View>
     </BackgroundRenderer>
+  )
+
+  if (!actions) return tree
+
+  return (
+    <RecusEngineActionsProvider value={actions}>
+      {tree}
+    </RecusEngineActionsProvider>
   )
 }
 

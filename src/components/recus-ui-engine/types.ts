@@ -63,6 +63,13 @@ export type RecusUiButtonBackground =
   | RecusUiButtonLinearGradientBackground
 
 export type RecusUiButtonFontWeight = '400' | '500' | '600' | '700' | '800'
+export type RecusUiInputType =
+  | 'text'
+  | 'password'
+  | 'email'
+  | 'number'
+  | 'phone'
+  | 'url'
 
 export type RecusUiShadow = {
   color: string
@@ -88,17 +95,6 @@ export type RecusUiButtonEvents = {
   onTap?: RecusUiButtonTapAction[]
 }
 
-export type RecusUiButtonLayer = {
-  id: string
-  type: 'button'
-  label: string
-  disabled: boolean | string
-  variant: RecusUiButtonVariant
-  layout: RecusUiLayerLayout
-  style: RecusUiButtonStyle
-  events?: RecusUiButtonEvents
-}
-
 export type RecusUiImageFit = 'cover' | 'contain' | 'fill' | 'none' | 'scale-down'
 
 export type RecusUiImagePosition =
@@ -111,6 +107,74 @@ export type RecusUiImagePosition =
   | 'top-right'
   | 'bottom-left'
   | 'bottom-right'
+
+export type RecusUiButtonLayer = {
+  id: string
+  type: 'button'
+  label: string
+  disabled: boolean | string
+  variant: RecusUiButtonVariant
+  layout: RecusUiLayerLayout
+  style: RecusUiButtonStyle
+  events?: RecusUiButtonEvents
+}
+
+export type RecusUiImageCrop = {
+  top: number
+  left: number
+  right: number
+  bottom: number
+}
+
+export type RecusUiImageShape = 'rectangle' | 'rounded' | 'circle'
+
+export type RecusUiImageLayerStyle = {
+  crop?: RecusUiImageCrop
+  shape?: RecusUiImageShape
+  opacity: number
+  objectFit: RecusUiImageFit
+  aspectRatio?: number | 'free'
+  borderColor: string
+  borderWidth: number
+  borderRadius: number
+  objectPosition: RecusUiImagePosition
+}
+
+export type RecusUiImageLayer = {
+  id: string
+  type: 'image'
+  alt?: string
+  source: {
+    url: string
+    type?: string
+  }
+  layout: RecusUiLayerLayout
+  style: RecusUiImageLayerStyle
+}
+
+export type RecusUiInputLayerStyle = {
+  fontSize: number
+  labelSize: number
+  textColor: string
+  labelColor: string
+  borderColor: string
+  borderWidth: number
+  borderRadius: number
+  backgroundColor: string
+  placeholderColor: string
+}
+
+export type RecusUiInputLayer = {
+  id: string
+  type: 'input'
+  label?: string
+  fieldId: string
+  required: boolean
+  inputType: RecusUiInputType
+  placeholder?: string
+  layout: RecusUiLayerLayout
+  style: RecusUiInputLayerStyle
+}
 
 export type RecusUiImageBackground = {
   type: 'image'
@@ -126,7 +190,7 @@ export type RecusUiBackground =
   | RecusUiSolidBackground
   | RecusUiImageBackground
 
-export type RecusUiLayer = RecusUiButtonLayer
+export type RecusUiLayer = RecusUiButtonLayer | RecusUiImageLayer | RecusUiInputLayer
 
 export type RecusUiSchema = {
   schemaVersion: string
@@ -152,3 +216,11 @@ export const isImageBackground = (
 export const isButtonLayer = (
   layer: RecusUiLayer,
 ): layer is RecusUiButtonLayer => layer.type === 'button'
+
+export const isImageLayer = (
+  layer: RecusUiLayer,
+): layer is RecusUiImageLayer => layer.type === 'image'
+
+export const isInputLayer = (
+  layer: RecusUiLayer,
+): layer is RecusUiInputLayer => layer.type === 'input'
