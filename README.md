@@ -27,7 +27,7 @@
 
 ## What is Recus?
 
-Recus is an onboarding SDK for React Native apps. You install one package, wrap your app with `RecusAppProvider`, and from that point your entire onboarding flow — every screen, every input field, every animation, every validation rule — is controlled from the **Recus dashboard**.
+Recus is an onboarding SDK for React Native apps. You install one package, wrap your app with `RecusAppProvider`, and from that point your entire onboarding flow — every screen, text layer, image, input field, button action, transition, and validation rule — is controlled from the **Recus dashboard**.
 
 **No code changes. No App Store submissions. No Jira tickets.**
 
@@ -60,8 +60,8 @@ PM wants to change onboarding
 
 1. **Install the SDK** — one npm package, no native linking required
 2. **Create your flow** — design onboarding screens in the Recus dashboard
-3. **Wrap your app** — `RecusAppProvider` handles everything automatically
-4. **Ship changes instantly** — update flows from the dashboard, no release needed
+3. **Wrap your app** — `RecusAppProvider` syncs the app user, assigned flow, resume state, and submissions automatically
+4. **Ship changes instantly** — update screens, layers, and navigation from the dashboard, no release needed
 
 ---
 
@@ -147,6 +147,7 @@ That's it. Run your app, sign in with a test user, and your onboarding flow will
 - When `user` is `undefined` — Recus does nothing. Zero performance impact.
 - When `user.userId` is set — Recus checks if that user needs to complete onboarding
 - If onboarding is needed — the flow appears above your app (native view, not a modal)
+- If the user already started — Recus resumes from the last persisted screen and restores submitted values
 - If onboarding is complete — Recus stays invisible forever
 - If the Recus API is down — Recus fails silently. **Your app always works.**
 
@@ -182,10 +183,11 @@ Inside your App → **Settings → SDK Keys**
 A **Flow** is the sequence of screens your users move through.
 
 1. Click **"New Flow"** inside your App
-2. Add screens — each screen can have a background (solid, gradient, image), inputs, and a button
-3. Configure inputs — text, email, phone, dropdowns, option cards, date pickers, and more
-4. Set validation rules and mark fields as mandatory
-5. Click **"Publish"** — changes go live instantly
+2. Add screens — each screen can have a background (solid, gradient, image), text layers, image layers, inputs, and buttons
+3. Configure inputs — text, password, boolean, email, number, phone, and URL fields are supported by the SDK renderer
+4. Configure navigation — buttons can continue, skip, or go back when the transition allows it
+5. Set validation rules and mark fields as mandatory
+6. Click **"Publish"** — changes go live instantly
 
 ### Step 5 — Test it
 
@@ -205,8 +207,6 @@ import { RecusAppProvider } from 'recus-react-native'
 <RecusAppProvider
   sdkKey="pk_live_xxx"    // your publishable key — required
   user={user}             // RecusUser | undefined — required
-  onComplete={(values) => console.log('Done:', values)}  // optional
-  onSkip={(screenId) => console.log('Skipped:', screenId)} // optional
 >
   <YourApp />
 </RecusAppProvider>
@@ -218,8 +218,15 @@ import { RecusAppProvider } from 'recus-react-native'
 |------|------|----------|-------------|
 | `sdkKey` | `string` | ✓ | Your publishable key from the dashboard |
 | `user` | `RecusUser \| undefined` | ✓ | Your authenticated user. Pass `undefined` when logged out |
-| `onComplete` | `(values: Record<string, any>) => void` | — | Called when the user completes a flow |
-| `onSkip` | `(screenId: string) => void` | — | Called when the user skips a screen |
+| `children` | `React.ReactNode` | ✓ | Your app tree |
+
+`RecusAppProvider` automatically:
+
+- Authenticates the SDK key and loads the active app onboarding flow
+- Creates or reuses the Recus app user for `user.userId`
+- Loads the user's assigned onboarding flow and persisted onboarding data
+- Persists the current screen, submitted input values, screen-time analytics, and completion state
+- Prefetches image assets before publishing a flow to the overlay renderer
 
 ---
 
@@ -238,22 +245,26 @@ type RecusUser = {
 
 ---
 
-### useRecusStatus
+### useRecus
 
-Check onboarding status from anywhere in your app.
+Read the current Recus onboarding state from anywhere inside `RecusAppProvider`.
 
 ```tsx
-import { useRecusStatus } from 'recus-react-native'
+import { useRecus } from 'recus-react-native'
 
 function ProfileScreen() {
-  const { isComplete, isLoading } = useRecusStatus()
-
-  if (isLoading) return <Spinner />
+  const { isComplete, isOnboardingReady } = useRecus()
 
   return (
     <View>
       {!isComplete && (
-        <Banner text="Complete your profile to unlock all features" />
+        <Banner
+          text={
+            isOnboardingReady
+              ? 'Complete your profile to unlock all features'
+              : 'Preparing onboarding...'
+          }
+        />
       )}
       <ProfileContent />
     </View>
@@ -265,123 +276,68 @@ function ProfileScreen() {
 
 | Value | Type | Description |
 |-------|------|-------------|
-| `isComplete` | `boolean` | `true` if user has completed the active mandatory flow |
-| `isLoading` | `boolean` | `true` while checking the user's status |
-| `error` | `Error \| null` | Set if the status check failed |
+| `user` | `RecusUser \| undefined` | Normalized active user |
+| `onboardingFlow` | `AppOnboardingFlow \| undefined` | Loaded flow assigned to the current app user |
+| `screens` | `AppOnboardingScreenConfig[]` | Normalized screens for the active flow |
+| `initialRoute` | `string \| undefined` | First screen or persisted resume screen |
+| `onboardingValues` | `Record<string, string \| boolean>` | Live input values |
+| `submittedValues` | `Record<string, string \| boolean>` | Values submitted for completed screens |
+| `analytics` | `Record<string, { timeSpentMs: number }>` | Screen-time analytics collected locally |
+| `isOnboardingReady` | `boolean` | `true` when a flow and initial route are ready to render |
+| `isActive` | `boolean` | `true` when `user.userId` is set |
+| `isNavigationEnabled` | `boolean` | `true` once user sync and local hydration are complete |
+| `isComplete` | `boolean` | `true` once onboarding has been completed locally or on the server |
 
 ---
 
-### useRecusField
+### API helpers
 
-Connect any component to a specific field in the current onboarding screen.
+The package also exports the underlying app SDK methods and response types if you need to integrate with Recus outside the automatic provider flow.
 
 ```tsx
-import { useRecusField } from 'recus-react-native'
-
-function BloodGroupPicker() {
-  const { value, error, onChange } = useRecusField('inp_blood_group')
-
-  return (
-    <View>
-      {['A+', 'B+', 'O+', 'AB+'].map(group => (
-        <TouchableOpacity
-          key={group}
-          onPress={() => onChange(group)}
-          style={[styles.card, value === group && styles.selected]}
-        >
-          <Text>{group}</Text>
-        </TouchableOpacity>
-      ))}
-      {error && <Text style={styles.error}>{error}</Text>}
-    </View>
-  )
-}
+import {
+  authenticateAppSdk,
+  createAppUser,
+  getAppOnboarding,
+  getAppUserOnboardingData,
+  patchAppUserOnboardingData,
+} from 'recus-react-native'
 ```
 
-**Returns:**
+Response data is normalized before it reaches your app:
 
-| Value | Type | Description |
-|-------|------|-------------|
-| `value` | `any` | Current field value |
-| `error` | `string \| undefined` | Validation error message |
-| `onChange` | `(value: any) => void` | Update the field value |
-| `onFocus` | `() => void` | Call when the field gains focus |
-| `onBlur` | `() => void` | Call when the field loses focus |
-| `isValid` | `boolean` | Whether the current value passes validation |
+- Missing or malformed screen arrays become an empty `screens` array
+- Unsupported input types fall back to `text`
+- User onboarding data and metadata always resolve to JSON objects
+- Assigned onboarding flows are normalized the same way as app-level flows
 
 ---
 
-### useRecusNavigation
+## Dashboard UI Engine
 
-Access navigation actions from inside the onboarding flow.
+The SDK can render custom dashboard-authored UI through each screen's `ui` config. Supported layers include:
 
-```tsx
-import { useRecusNavigation } from 'recus-react-native'
+- `text` — styled copy with alignment, font weight, line height, letter spacing, transform, and decoration support
+- `image` — remote image layers with object fit, object position, crop, opacity, shape, border, and radius support
+- `input` — freeform inputs connected to the same validation and submission state as standard screens
+- `button` — tappable controls with solid or gradient backgrounds
 
-function CustomCTA() {
-  const { nextScreen, completeFlow, isLastScreen, isSubmitting } = useRecusNavigation()
+Reserved button/action IDs are wired by the SDK:
 
-  return (
-    <TouchableOpacity
-      onPress={isLastScreen ? completeFlow : nextScreen}
-      disabled={isSubmitting}
-    >
-      <Text>{isLastScreen ? 'Get started' : 'Continue'}</Text>
-    </TouchableOpacity>
-  )
-}
-```
+- `continue` validates the current screen, submits its values, and advances to the next transition or completes the flow
+- `skip` advances without validating the current screen
+- `back` returns to the previous screen when the transition has `backAllowed: true`
 
 ---
 
-## Custom UI with Hooks
+## Navigation and Persistence
 
-Recus is headless by default. You can build entirely custom screens using the provided hooks — Recus handles all the data, validation, navigation, and analytics while you own every pixel.
+Recus keeps onboarding navigation isolated from your app navigation. Dashboard transitions drive the onboarding stack, while your app's routes stay untouched.
 
-### Using the component registry
-
-Register your own components once. Recus renders them for the matching field types.
-
-```tsx
-<RecusAppProvider
-  sdkKey="pk_live_xxx"
-  user={user}
-  componentRegistry={{
-    text:            MyTextInput,
-    email:           MyEmailInput,
-    phone:           MyPhoneInput,
-    boolean:         MyToggle,
-    dob_picker:      MyDatePicker,      // custom key
-    gender_selector: MyGenderSelector, // custom key
-    blood_group:     MyBloodGroupPicker,
-  }}
->
-```
-
-Your component receives:
-
-```tsx
-type RecusInputProps = {
-  input:    InputConfig  // field config from schema
-  value:    any          // current value
-  onChange: (v: any) => void
-  error?:   string
-}
-
-function MyTextInput({ input, value, onChange, error }: RecusInputProps) {
-  return (
-    <View>
-      <Text>{input.label}</Text>
-      <TextInput
-        value={value ?? ''}
-        onChangeText={onChange}
-        placeholder={input.placeholder}
-      />
-      {error && <Text style={styles.error}>{error}</Text>}
-    </View>
-  )
-}
-```
+- Forward transitions slide in after the next screen has mounted, reducing image and custom UI jank
+- Back navigation works from dashboard-authored `back` buttons, Android hardware back, and iOS edge swipe when `backAllowed` is enabled
+- The current screen is persisted, so users can leave and resume onboarding later
+- Completion persists with submitted values and screen-time analytics
 
 ---
 
@@ -403,13 +359,13 @@ Overage: $8 per 1,000 additional MAUs. Never hard cut off — 7-day grace period
 Yes. Recus has no native dependencies and works with Expo Go out of the box.
 
 **Does Recus modify my navigation?**
-No. Recus sits above your app as an absolutelyPositioned native view. Your navigation, routes, and component tree are completely untouched.
+No. Recus sits above your app as an absolutely positioned native view. Your navigation, routes, and component tree are completely untouched.
 
 **What happens if the Recus API is down?**
 Recus fails silently. Your app continues working normally. Onboarding will appear once the API is reachable again.
 
-**Can I use my own components?**
-Yes — that's the recommended approach. Pass your components via `componentRegistry` and Recus renders them with your brand's exact look and feel.
+**Can I design custom screens?**
+Yes. Build screens in the Recus dashboard using backgrounds, text layers, image layers, inputs, and buttons. The SDK renders that UI natively from the published flow config.
 
 **Where is user data stored?**
 All submitted field values are stored against your own user IDs on Recus infrastructure. You can retrieve them via the API or receive them via webhooks on flow completion.
@@ -434,13 +390,7 @@ Check in order:
 
 **Onboarding appeared once but never again**
 
-This is correct. Once a user completes a flow, Recus caches the completion state. To reset for testing:
-
-```tsx
-import { useRecusStatus } from 'recus-react-native'
-const { reset } = useRecusStatus()
-reset() // clears local cache — onboarding will appear again
-```
+This is correct. Once a user completes a flow, Recus caches and syncs the completion state. Use a new test user ID, or clear this package's local persisted store while testing.
 
 **"RecusAppProvider must be at the root"**
 
