@@ -57,7 +57,7 @@ const isLinearGradientBackground = (
 function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
   const { layout, style } = layer
   const disabled = layer.disabled === true
-  const { onContinue, onSkip } = useRecusEngineActions()
+  const { onContinue, onSkip, onBack } = useRecusEngineActions()
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     const shadowStyle = style.shadow
@@ -121,6 +121,11 @@ function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
 
     if (layer.id === RECUS_ENGINE_ACTION_IDS.skip) {
       onSkip()
+      return
+    }
+
+    if (layer.id === RECUS_ENGINE_ACTION_IDS.back) {
+      onBack()
       return
     }
 

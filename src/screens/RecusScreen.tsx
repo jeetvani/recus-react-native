@@ -16,7 +16,7 @@ import {
 } from '../api/appOnboarding'
 import { RecusEngineActions, RecusUiEngine } from '../components/recus-ui-engine'
 import { useRecus } from '../context/RecusContext'
-import { useRecusNavigation } from '../navigation/RecusNavigator'
+import { useRecusNavigation } from '../navigation/RecusNavigationContext'
 
 // ─── JSON Config Types ────────────────────────────────────────────────────────
 
@@ -63,7 +63,6 @@ export default function RecusScreen({ config }: RecusScreenProps) {
   const { navigate, goBack } = useRecusNavigation()
   const transitions = config.transitions ?? []
   const nextTransition = transitions[0]
-  const canGoBack = transitions.some(transition => transition.backAllowed)
   const inputRules = useMemo(() => {
     return Object.fromEntries(
       (config.inputs ?? []).map(input => [
@@ -159,11 +158,19 @@ export default function RecusScreen({ config }: RecusScreenProps) {
     () => ({
       onContinue: handleContinue,
       onSkip: handleSkip,
+      onBack: goBack,
       values: onboardingValues,
       inputRules,
       onInputChange: setOnboardingValue,
     }),
-    [handleContinue, handleSkip, inputRules, onboardingValues, setOnboardingValue],
+    [
+      goBack,
+      handleContinue,
+      handleSkip,
+      inputRules,
+      onboardingValues,
+      setOnboardingValue,
+    ],
   )
 
   if (config.ui && typeof config.ui === 'object') {
@@ -239,12 +246,6 @@ export default function RecusScreen({ config }: RecusScreenProps) {
         })}
 
         <View style={styles.actions}>
-          {canGoBack ? (
-            <TouchableOpacity style={[styles.btn, styles.btnSecondary]} onPress={goBack}>
-              <Text style={[styles.btnText, styles.btnTextSecondary]}>Back</Text>
-            </TouchableOpacity>
-          ) : null}
-
           <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={handleContinue}>
             <Text style={styles.btnText}>{nextTransition?.to ? 'Continue' : 'Submit'}</Text>
           </TouchableOpacity>
@@ -342,17 +343,9 @@ const styles = StyleSheet.create({
   btnPrimary: {
     backgroundColor: '#111827',
   },
-  btnSecondary: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#D1D5DB',
-    borderWidth: 1,
-  },
   btnText: {
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  btnTextSecondary: {
-    color: '#111827',
   },
 })

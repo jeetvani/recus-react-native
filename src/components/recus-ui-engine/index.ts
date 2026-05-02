@@ -15,7 +15,12 @@ export {
   SolidBackground,
   ImageBackground,
 } from './backgrounds'
-export { RecusEngineButton, RecusEngineImage } from './layers'
+export {
+  RecusEngineButton,
+  RecusEngineImage,
+  RecusEngineInput,
+  RecusEngineText,
+} from './layers'
 export type {
   RecusUi,
   RecusUiBackground,
@@ -46,4 +51,10 @@ export type {
   RecusUiSchema,
   RecusUiShadow,
   RecusUiSolidBackground,
+  RecusUiTextAlign,
+  RecusUiTextDecoration,
+  RecusUiTextFontStyle,
+  RecusUiTextLayer,
+  RecusUiTextLayerStyle,
+  RecusUiTextTransform,
 } from './types'

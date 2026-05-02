@@ -300,7 +300,8 @@ export function RecusAppProvider({
   user,
   children,
 }: RecusAppProviderProps) {
-  const [onboardingFlow, setOnboardingFlow] = useState<AppOnboardingFlow | undefined>(undefined)
+  const [appOnboardingFlow, setAppOnboardingFlow] = useState<AppOnboardingFlow | undefined>(undefined)
+  const [assignedOnboardingFlow, setAssignedOnboardingFlow] = useState<AppOnboardingFlow | undefined>(undefined)
   const [isNavigationEnabled, setIsNavigationEnabled] = useState(false)
   const syncingUserIdRef = useRef<string | null>(null)
   const syncingOnboardingDataUserIdRef = useRef<string | null>(null)
@@ -330,6 +331,35 @@ export function RecusAppProvider({
       userId: normalizedUserId,
     }
   }, [normalizedUserId, user])
+  const assignedOnboardingFlowId = storedOnboardingData?.onboardingFlowId
+  const onboardingFlow = useMemo(() => {
+    if (!normalizedUser) return appOnboardingFlow
+    if (!assignedOnboardingFlowId) return appOnboardingFlow
+    return assignedOnboardingFlow?.id === assignedOnboardingFlowId
+      ? assignedOnboardingFlow
+      : undefined
+  }, [
+    appOnboardingFlow,
+    assignedOnboardingFlow,
+    assignedOnboardingFlowId,
+    normalizedUser,
+  ])
+
+  const publishAssignedOnboardingFlow = useCallback(
+    async (nextOnboardingFlow: AppOnboardingFlow | undefined) => {
+      if (!nextOnboardingFlow) return
+
+      await prefetchFlowAssets(nextOnboardingFlow)
+      setAssignedOnboardingFlow(nextOnboardingFlow)
+      console.info('Recus SDK assigned onboarding loaded', {
+        id: nextOnboardingFlow.id,
+        appId: nextOnboardingFlow.appId,
+        name: nextOnboardingFlow.name,
+        screens: nextOnboardingFlow.data.screens.length,
+      })
+    },
+    [],
+  )
 
   useEffect(() => {
     setRecusSdkKey(sdkKey)
@@ -344,7 +374,8 @@ export function RecusAppProvider({
 
     const validateSdkKey = async () => {
       let currentStep = 'validate SDK key'
-      setOnboardingFlow(undefined)
+      setAppOnboardingFlow(undefined)
+      setAssignedOnboardingFlow(undefined)
 
       try {
         await authenticateAppSdk({ sdkKey })
@@ -364,7 +395,7 @@ export function RecusAppProvider({
 
         if (!isMounted) return
 
-        setOnboardingFlow(nextOnboardingFlow)
+        setAppOnboardingFlow(nextOnboardingFlow)
         console.info('Recus SDK Onboarding Loaded', {
           id: nextOnboardingFlow.id,
           appId: nextOnboardingFlow.appId,
@@ -373,7 +404,8 @@ export function RecusAppProvider({
         })
       } catch (error) {
         if (!isMounted) return
-        setOnboardingFlow(undefined)
+        setAppOnboardingFlow(undefined)
+        setAssignedOnboardingFlow(undefined)
 
         const errorMessage =
           error instanceof Error && error.message
@@ -425,7 +457,14 @@ export function RecusAppProvider({
 
         if (!isMounted) return
 
+        await publishAssignedOnboardingFlow(response.onboardingFlow)
+
+        if (!isMounted) return
+
         upsertStoredRecusUser(normalizedUser.userId, response.appUser)
+        if (response.userOnboardingData) {
+          upsertStoredOnboardingData(normalizedUser.userId, response.userOnboardingData)
+        }
         setIsNavigationEnabled(true)
         console.info('Recus user synchronized', {
           userId: normalizedUser.userId,
@@ -460,6 +499,8 @@ export function RecusAppProvider({
     normalizedUser,
     sdkKey,
     storedRecusUser,
+    publishAssignedOnboardingFlow,
+    upsertStoredOnboardingData,
     upsertStoredRecusUser,
   ])
 
@@ -475,7 +516,11 @@ export function RecusAppProvider({
         return
       }
 
-      if (storedOnboardingData) {
+      const hasAssignedFlow =
+        !storedOnboardingData?.onboardingFlowId ||
+        assignedOnboardingFlow?.id === storedOnboardingData.onboardingFlowId
+
+      if (storedOnboardingData && hasAssignedFlow) {
         return
       }
 
@@ -490,10 +535,15 @@ export function RecusAppProvider({
 
         if (!isMounted) return
 
+        await publishAssignedOnboardingFlow(response.onboardingFlow)
+
+        if (!isMounted) return
+
         upsertStoredOnboardingData(normalizedUser.userId, response.userOnboardingData)
         console.info('Recus app-user onboarding-data loaded', {
           userId: normalizedUser.userId,
           onboardingDataId: response.userOnboardingData.id,
+          onboardingFlowId: response.userOnboardingData.onboardingFlowId,
         })
       } catch (error) {
         if (!isMounted) return
@@ -521,7 +571,9 @@ export function RecusAppProvider({
   }, [
     hasHydratedOnboardingDataStore,
     hasHydratedUsersStore,
+    assignedOnboardingFlow,
     normalizedUser,
+    publishAssignedOnboardingFlow,
     sdkKey,
     storedOnboardingData,
     storedRecusUser,

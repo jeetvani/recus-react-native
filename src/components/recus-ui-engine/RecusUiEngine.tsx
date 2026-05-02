@@ -2,9 +2,20 @@ import React, { useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { RecusEngineActions, RecusEngineActionsProvider } from './actions'
 import { BackgroundRenderer } from './backgrounds'
-import { RecusEngineButton, RecusEngineImage, RecusEngineInput } from './layers'
+import {
+  RecusEngineButton,
+  RecusEngineImage,
+  RecusEngineInput,
+  RecusEngineText,
+} from './layers'
 import { normalizeRecusUi } from './schema'
-import { RecusUi, isButtonLayer, isImageLayer, isInputLayer } from './types'
+import {
+  RecusUi,
+  isButtonLayer,
+  isImageLayer,
+  isInputLayer,
+  isTextLayer,
+} from './types'
 
 type RecusUiEngineProps = {
   UI: RecusUi
@@ -53,6 +64,10 @@ export function RecusUiEngine({ UI, actions }: RecusUiEngineProps) {
 
           if (isInputLayer(layer)) {
             return <RecusEngineInput key={layer.id} layer={layer} />
+          }
+
+          if (isTextLayer(layer)) {
+            return <RecusEngineText key={layer.id} layer={layer} />
           }
 
           return null

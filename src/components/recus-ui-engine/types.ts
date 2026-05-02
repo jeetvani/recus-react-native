@@ -176,6 +176,48 @@ export type RecusUiInputLayer = {
   style: RecusUiInputLayerStyle
 }
 
+export type RecusUiTextAlign = 'left' | 'center' | 'right' | 'justify'
+
+export type RecusUiTextFontStyle = 'normal' | 'italic'
+
+export type RecusUiTextTransform =
+  | 'none'
+  | 'uppercase'
+  | 'lowercase'
+  | 'capitalize'
+
+export type RecusUiTextDecoration =
+  | 'none'
+  | 'underline'
+  | 'line-through'
+  | 'underline line-through'
+
+export type RecusUiTextLayerStyle = {
+  color: string
+  opacity: number
+  fontSize: number
+  fontStyle: RecusUiTextFontStyle
+  textAlign: RecusUiTextAlign
+  fontFamily?: string
+  fontWeight: RecusUiButtonFontWeight
+  /**
+   * Stored as either a CSS-style multiplier (e.g. `1.4`) or an absolute px
+   * value, mirroring the web editor. The renderer resolves it to px.
+   */
+  lineHeight: number
+  letterSpacing: number
+  textTransform: RecusUiTextTransform
+  textDecoration: RecusUiTextDecoration
+}
+
+export type RecusUiTextLayer = {
+  id: string
+  type: 'text'
+  content: string
+  layout: RecusUiLayerLayout
+  style: RecusUiTextLayerStyle
+}
+
 export type RecusUiImageBackground = {
   type: 'image'
   image: {
@@ -190,7 +232,11 @@ export type RecusUiBackground =
   | RecusUiSolidBackground
   | RecusUiImageBackground
 
-export type RecusUiLayer = RecusUiButtonLayer | RecusUiImageLayer | RecusUiInputLayer
+export type RecusUiLayer =
+  | RecusUiButtonLayer
+  | RecusUiImageLayer
+  | RecusUiInputLayer
+  | RecusUiTextLayer
 
 export type RecusUiSchema = {
   schemaVersion: string
@@ -224,3 +270,7 @@ export const isImageLayer = (
 export const isInputLayer = (
   layer: RecusUiLayer,
 ): layer is RecusUiInputLayer => layer.type === 'input'
+
+export const isTextLayer = (
+  layer: RecusUiLayer,
+): layer is RecusUiTextLayer => layer.type === 'text'

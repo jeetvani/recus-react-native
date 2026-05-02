@@ -1,5 +1,6 @@
 import { appSdkRequest, JsonObject } from './client'
 import { apiRoutes } from './routes'
+import { AppOnboardingFlow, normalizeAppOnboardingFlow } from './appOnboarding'
 
 export type AppUserOnboardingRecord = {
   id: string
@@ -15,6 +16,7 @@ export type AppUserOnboardingRecord = {
 
 export type GetAppUserOnboardingDataResponse = {
   userOnboardingData: AppUserOnboardingRecord
+  onboardingFlow?: AppOnboardingFlow
 }
 
 type GetAppUserOnboardingDataParams = {
@@ -32,8 +34,17 @@ const toJsonObject = (value: unknown): JsonObject => {
     : {}
 }
 
-const normalizeRecord = (
-  response: GetAppUserOnboardingDataResponse,
+export type RawGetAppUserOnboardingDataResponse = Omit<
+  GetAppUserOnboardingDataResponse,
+  'onboardingFlow'
+> & {
+  onboardingFlow?: Omit<AppOnboardingFlow, 'data'> & {
+    data: JsonObject
+  }
+}
+
+export const normalizeAppUserOnboardingDataResponse = (
+  response: RawGetAppUserOnboardingDataResponse,
 ): GetAppUserOnboardingDataResponse => {
   return {
     userOnboardingData: {
@@ -45,6 +56,9 @@ const normalizeRecord = (
       createdAt: toNullableString(response.userOnboardingData.createdAt),
       updatedAt: toNullableString(response.userOnboardingData.updatedAt),
     },
+    onboardingFlow: response.onboardingFlow
+      ? normalizeAppOnboardingFlow(response.onboardingFlow)
+      : undefined,
   }
 }
 
@@ -52,13 +66,13 @@ export const getAppUserOnboardingData = async ({
   sdkKey,
   appUserId,
 }: GetAppUserOnboardingDataParams): Promise<GetAppUserOnboardingDataResponse> => {
-  const response = await appSdkRequest<GetAppUserOnboardingDataResponse>({
+  const response = await appSdkRequest<RawGetAppUserOnboardingDataResponse>({
     method: 'GET',
     path: apiRoutes.appSdk.appUserOnboardingData(appUserId),
     sdkKey,
   })
 
-  return normalizeRecord(response)
+  return normalizeAppUserOnboardingDataResponse(response)
 }
 
 export type PatchAppUserOnboardingDataResponse = GetAppUserOnboardingDataResponse
@@ -82,7 +96,7 @@ export const patchAppUserOnboardingData = async ({
   metadata,
 }: PatchAppUserOnboardingDataParams): Promise<PatchAppUserOnboardingDataResponse> => {
   const response = await appSdkRequest<
-    PatchAppUserOnboardingDataResponse,
+    RawGetAppUserOnboardingDataResponse,
     PatchAppUserOnboardingDataBody
   >({
     method: 'PATCH',
@@ -91,5 +105,5 @@ export const patchAppUserOnboardingData = async ({
     sdkKey,
   })
 
-  return normalizeRecord(response)
+  return normalizeAppUserOnboardingDataResponse(response)
 }

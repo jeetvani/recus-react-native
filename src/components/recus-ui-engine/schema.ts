@@ -27,6 +27,12 @@ import {
   RecusUiSchema,
   RecusUiShadow,
   RecusUiSolidBackground,
+  RecusUiTextAlign,
+  RecusUiTextDecoration,
+  RecusUiTextFontStyle,
+  RecusUiTextLayer,
+  RecusUiTextLayerStyle,
+  RecusUiTextTransform,
 } from './types'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -109,6 +115,29 @@ const ALLOWED_INPUT_TYPES: RecusUiInputType[] = [
   'url',
 ]
 
+const ALLOWED_TEXT_ALIGNS: RecusUiTextAlign[] = [
+  'left',
+  'center',
+  'right',
+  'justify',
+]
+
+const ALLOWED_TEXT_FONT_STYLES: RecusUiTextFontStyle[] = ['normal', 'italic']
+
+const ALLOWED_TEXT_TRANSFORMS: RecusUiTextTransform[] = [
+  'none',
+  'uppercase',
+  'lowercase',
+  'capitalize',
+]
+
+const ALLOWED_TEXT_DECORATIONS: RecusUiTextDecoration[] = [
+  'none',
+  'underline',
+  'line-through',
+  'underline line-through',
+]
+
 const DEFAULT_BUTTON_LAYOUT: RecusUiLayerLayout = {
   position: 'freeform',
   x: '25%',
@@ -156,6 +185,29 @@ const DEFAULT_INPUT_LAYOUT: RecusUiLayerLayout = {
   width: '80%',
   height: 48,
   zIndex: 1,
+}
+
+const DEFAULT_TEXT_LAYOUT: RecusUiLayerLayout = {
+  position: 'freeform',
+  x: '5%',
+  y: '5%',
+  width: '90%',
+  height: 'hug',
+  zIndex: 1,
+}
+
+const DEFAULT_TEXT_STYLE: RecusUiTextLayerStyle = {
+  color: '#111111',
+  opacity: 1,
+  fontSize: 16,
+  fontStyle: 'normal',
+  textAlign: 'left',
+  fontFamily: undefined,
+  fontWeight: '400',
+  lineHeight: 1.4,
+  letterSpacing: 0,
+  textTransform: 'none',
+  textDecoration: 'none',
 }
 
 const DEFAULT_INPUT_STYLE: RecusUiInputLayerStyle = {
@@ -306,6 +358,64 @@ const toInputType = (value: unknown): RecusUiInputType => {
     : 'text'
 }
 
+const toTextAlign = (value: unknown): RecusUiTextAlign => {
+  return typeof value === 'string' &&
+    (ALLOWED_TEXT_ALIGNS as string[]).includes(value)
+    ? (value as RecusUiTextAlign)
+    : DEFAULT_TEXT_STYLE.textAlign
+}
+
+const toTextFontStyle = (value: unknown): RecusUiTextFontStyle => {
+  return typeof value === 'string' &&
+    (ALLOWED_TEXT_FONT_STYLES as string[]).includes(value)
+    ? (value as RecusUiTextFontStyle)
+    : DEFAULT_TEXT_STYLE.fontStyle
+}
+
+const toTextTransform = (value: unknown): RecusUiTextTransform => {
+  return typeof value === 'string' &&
+    (ALLOWED_TEXT_TRANSFORMS as string[]).includes(value)
+    ? (value as RecusUiTextTransform)
+    : DEFAULT_TEXT_STYLE.textTransform
+}
+
+const toTextDecoration = (value: unknown): RecusUiTextDecoration => {
+  return typeof value === 'string' &&
+    (ALLOWED_TEXT_DECORATIONS as string[]).includes(value)
+    ? (value as RecusUiTextDecoration)
+    : DEFAULT_TEXT_STYLE.textDecoration
+}
+
+/**
+ * Web exports `fontFamily` as a CSS fallback list (e.g.
+ * `"Inter, system-ui, -apple-system, sans-serif"`). React Native does
+ * NOT parse fallback lists — passing the whole string fails silently and
+ * triggers slow-path glyph lookups on iOS. Strip to the first declared
+ * family, drop generic CSS keywords, and fall back to system font when
+ * we can't be sure the family is registered with the runtime.
+ */
+const toTextFontFamily = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined
+  const first = value.split(',')[0]?.trim().replace(/^["']|["']$/g, '')
+  if (!first) return undefined
+  const lowered = first.toLowerCase()
+  const cssGenerics = new Set([
+    'system-ui',
+    '-apple-system',
+    'blinkmacsystemfont',
+    'sans-serif',
+    'serif',
+    'monospace',
+    'cursive',
+    'fantasy',
+    'inherit',
+    'initial',
+    'unset',
+  ])
+  if (cssGenerics.has(lowered)) return undefined
+  return first
+}
+
 const toShadow = (value: unknown): RecusUiShadow | null | undefined => {
   if (value === null) return null
   if (!isRecord(value)) return undefined
@@ -344,6 +454,10 @@ const toImageLayout = (value: unknown): RecusUiLayerLayout => {
 
 const toInputLayout = (value: unknown): RecusUiLayerLayout => {
   return toLayerLayout(value, DEFAULT_INPUT_LAYOUT)
+}
+
+const toTextLayout = (value: unknown): RecusUiLayerLayout => {
+  return toLayerLayout(value, DEFAULT_TEXT_LAYOUT)
 }
 
 const toImageCrop = (value: unknown): RecusUiImageCrop | undefined => {
@@ -425,6 +539,24 @@ const toInputStyle = (value: unknown): RecusUiInputLayerStyle => {
     placeholderColor: isHexColor(value.placeholderColor)
       ? value.placeholderColor
       : DEFAULT_INPUT_STYLE.placeholderColor,
+  }
+}
+
+const toTextStyle = (value: unknown): RecusUiTextLayerStyle => {
+  if (!isRecord(value)) return DEFAULT_TEXT_STYLE
+
+  return {
+    color: isHexColor(value.color) ? value.color : DEFAULT_TEXT_STYLE.color,
+    opacity: Math.min(1, toNonNegativeNumber(value.opacity) ?? DEFAULT_TEXT_STYLE.opacity),
+    fontSize: toNonNegativeNumber(value.fontSize) ?? DEFAULT_TEXT_STYLE.fontSize,
+    fontStyle: toTextFontStyle(value.fontStyle),
+    textAlign: toTextAlign(value.textAlign),
+    fontFamily: toTextFontFamily(value.fontFamily),
+    fontWeight: toFontWeight(value.fontWeight),
+    lineHeight: toNonNegativeNumber(value.lineHeight) ?? DEFAULT_TEXT_STYLE.lineHeight,
+    letterSpacing: toFiniteNumber(value.letterSpacing) ?? DEFAULT_TEXT_STYLE.letterSpacing,
+    textTransform: toTextTransform(value.textTransform),
+    textDecoration: toTextDecoration(value.textDecoration),
   }
 }
 
@@ -522,10 +654,30 @@ const toInputLayer = (value: Record<string, unknown>, index: number): RecusUiInp
   }
 }
 
+const toTextLayer = (value: Record<string, unknown>, index: number): RecusUiTextLayer | null => {
+  if (value.type !== 'text') return null
+
+  const content = toString(value.content)
+  if (content === undefined) return null
+
+  return {
+    id: toString(value.id) ?? `text-${index + 1}`,
+    type: 'text',
+    content,
+    layout: toTextLayout(value.layout),
+    style: toTextStyle(value.style),
+  }
+}
+
 const toLayer = (value: unknown, index: number): RecusUiLayer | null => {
   if (!isRecord(value)) return null
 
-  return toButtonLayer(value, index) ?? toImageLayer(value, index) ?? toInputLayer(value, index)
+  return (
+    toButtonLayer(value, index) ??
+    toImageLayer(value, index) ??
+    toInputLayer(value, index) ??
+    toTextLayer(value, index)
+  )
 }
 
 const toLayers = (value: unknown): RecusUiLayer[] => {

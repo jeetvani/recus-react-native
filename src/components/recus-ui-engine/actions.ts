@@ -12,6 +12,7 @@ import type { OnboardingInputValue } from '../../context/RecusContext'
 export const RECUS_ENGINE_ACTION_IDS = {
   continue: 'continue',
   skip: 'skip',
+  back: 'back',
 } as const
 
 export type RecusEngineActionId =
@@ -20,6 +21,7 @@ export type RecusEngineActionId =
 export type RecusEngineActions = {
   onContinue: () => void
   onSkip: () => void
+  onBack: () => void
   values: Record<string, OnboardingInputValue>
   inputRules: Record<string, { maxLength?: number }>
   onInputChange: (inputId: string, value: OnboardingInputValue) => void
@@ -30,6 +32,7 @@ const noop = () => {}
 const DEFAULT_ACTIONS: RecusEngineActions = {
   onContinue: noop,
   onSkip: noop,
+  onBack: noop,
   values: {},
   inputRules: {},
   onInputChange: noop,
@@ -47,5 +50,9 @@ export function useRecusEngineActions(): RecusEngineActions {
 export const isRecusEngineActionId = (
   value: unknown,
 ): value is RecusEngineActionId => {
-  return value === RECUS_ENGINE_ACTION_IDS.continue || value === RECUS_ENGINE_ACTION_IDS.skip
+  return (
+    value === RECUS_ENGINE_ACTION_IDS.continue ||
+    value === RECUS_ENGINE_ACTION_IDS.skip ||
+    value === RECUS_ENGINE_ACTION_IDS.back
+  )
 }

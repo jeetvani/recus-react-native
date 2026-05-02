@@ -130,6 +130,17 @@ type GetAppOnboardingParams = {
   sdkKey?: string
 }
 
+export const normalizeAppOnboardingFlow = (
+  response: Omit<AppOnboardingFlow, 'data'> & {
+    data: JsonObject
+  },
+): AppOnboardingFlow => {
+  return {
+    ...response,
+    data: toOnboardingData(response.data),
+  }
+}
+
 export const getAppOnboarding = async ({
   sdkKey,
 }: GetAppOnboardingParams = {}): Promise<AppOnboardingFlow> => {
@@ -143,8 +154,5 @@ export const getAppOnboarding = async ({
     sdkKey,
   })
 
-  return {
-    ...response,
-    data: toOnboardingData(response.data),
-  }
+  return normalizeAppOnboardingFlow(response)
 }
