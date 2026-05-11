@@ -1,8 +1,11 @@
 import React, { memo, useMemo } from 'react'
 import {
+  Animated,
   KeyboardTypeOptions,
+  Pressable,
   StyleProp,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TextStyle,
@@ -10,6 +13,7 @@ import {
   ViewStyle,
 } from 'react-native'
 import { useRecusEngineActions } from '../actions'
+import { useRecusLayerAnimation } from '../animation'
 import {
   RecusUiInputLayer,
   RecusUiInputType,
@@ -35,6 +39,7 @@ const toKeyboardType = (inputType: RecusUiInputType): KeyboardTypeOptions => {
     case 'number':
       return 'numeric'
     case 'phone':
+    case 'tel':
       return 'phone-pad'
     case 'url':
       return 'url'
@@ -49,6 +54,7 @@ function RecusEngineInputImpl({ layer }: RecusEngineInputProps) {
   const currentValue = values[layer.fieldId]
   const value = typeof currentValue === 'string' ? currentValue : ''
   const trimmedLabel = layer.label?.trim()
+  const animationStyle = useRecusLayerAnimation(layer.animation)
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     return [
@@ -81,14 +87,81 @@ function RecusEngineInputImpl({ layer }: RecusEngineInputProps) {
     }
   }, [style])
 
-  return (
-    <View style={containerStyle} pointerEvents="box-none">
-      {trimmedLabel ? (
-        <Text numberOfLines={1} style={[styles.label, labelStyle]}>
-          {trimmedLabel}
-          {layer.required ? ' *' : ''}
-        </Text>
-      ) : null}
+  const renderInput = () => {
+    if (layer.inputType === 'boolean') {
+      return (
+        <View style={[styles.booleanRow, inputStyle]}>
+          <Text style={[styles.booleanText, labelStyle]}>{layer.placeholder}</Text>
+          <Switch
+            value={currentValue === true}
+            onValueChange={nextValue => onInputChange(layer.fieldId, nextValue)}
+          />
+        </View>
+      )
+    }
+
+    if (layer.inputType === 'radio') {
+      const selectedValues = Array.isArray(currentValue)
+        ? currentValue
+        : typeof currentValue === 'string'
+          ? [currentValue]
+          : layer.selectedValues ?? []
+      const selectionMode = layer.selectionMode ?? 'single'
+
+      return (
+        <View style={[styles.radioGroup, inputStyle]}>
+          {(layer.options ?? []).map(option => {
+            const selected = selectedValues.includes(option.value)
+            const palette = selected
+              ? style.optionStyle?.selected
+              : style.optionStyle?.unselected
+
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole={selectionMode === 'multiple' ? 'checkbox' : 'radio'}
+                accessibilityState={{ checked: selected }}
+                onPress={() => {
+                  if (selectionMode === 'multiple') {
+                    const nextValues = selected
+                      ? selectedValues.filter(item => item !== option.value)
+                      : [...selectedValues, option.value]
+                    onInputChange(layer.fieldId, nextValues)
+                    return
+                  }
+
+                  onInputChange(layer.fieldId, option.value)
+                }}
+                style={[
+                  styles.radioOption,
+                  {
+                    backgroundColor: palette?.backgroundColor ?? style.backgroundColor,
+                    borderColor: palette?.borderColor ?? style.borderColor,
+                    borderWidth: style.optionStyle?.borderWidth ?? style.borderWidth,
+                    borderRadius: style.optionStyle?.borderRadius ?? style.borderRadius,
+                    marginBottom: style.optionStyle?.gap ?? 8,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.radioOptionText,
+                    {
+                      color: palette?.textColor ?? style.textColor,
+                      fontSize: style.fontSize,
+                    },
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      )
+    }
+
+    return (
       <TextInput
         value={value}
         onChangeText={nextValue => onInputChange(layer.fieldId, nextValue)}
@@ -104,10 +177,23 @@ function RecusEngineInputImpl({ layer }: RecusEngineInputProps) {
             ? 'none'
             : 'sentences'
         }
-        autoCorrect={layer.inputType === 'text'}
-        maxLength={inputRules[layer.fieldId]?.maxLength}
+        autoCorrect={layer.inputType === 'text' || layer.inputType === 'textarea'}
+        maxLength={inputRules[layer.fieldId]?.maxLength ?? layer.maxLength}
+        multiline={layer.inputType === 'textarea'}
       />
-    </View>
+    )
+  }
+
+  return (
+    <Animated.View style={[containerStyle, animationStyle]} pointerEvents="box-none">
+      {trimmedLabel ? (
+        <Text numberOfLines={1} style={[styles.label, labelStyle]}>
+          {trimmedLabel}
+          {layer.required ? ' *' : ''}
+        </Text>
+      ) : null}
+      {renderInput()}
+    </Animated.View>
   )
 }
 
@@ -125,5 +211,29 @@ const styles = StyleSheet.create({
     minHeight: 1,
     paddingHorizontal: 12,
     paddingVertical: 0,
+  },
+  booleanRow: {
+    flex: 1,
+    minHeight: 1,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  booleanText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  radioGroup: {
+    flex: 1,
+    minHeight: 1,
+    padding: 10,
+  },
+  radioOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  radioOptionText: {
+    fontWeight: '600',
   },
 })

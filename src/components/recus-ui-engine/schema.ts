@@ -6,6 +6,7 @@ import {
   RecusUiButtonFontWeight,
   RecusUiButtonLayer,
   RecusUiButtonStyle,
+  RecusUiButtonType,
   RecusUiButtonVariant,
   RecusUiCanvas,
   RecusUiGradientStop,
@@ -16,6 +17,7 @@ import {
   RecusUiImageLayerStyle,
   RecusUiImagePosition,
   RecusUiImageShape,
+  RecusUiLayerAnimation,
   RecusUiInputLayer,
   RecusUiInputLayerStyle,
   RecusUiInputType,
@@ -24,6 +26,7 @@ import {
   RecusUiLayerLayout,
   RecusUiLayerPosition,
   RecusUiLinearGradient,
+  RecusUiRadialGradient,
   RecusUiSchema,
   RecusUiShadow,
   RecusUiSolidBackground,
@@ -90,6 +93,8 @@ const ALLOWED_BUTTON_VARIANTS: RecusUiButtonVariant[] = [
   'link',
 ]
 
+const ALLOWED_BUTTON_TYPES: RecusUiButtonType[] = ['continue', 'skip', 'back']
+
 const ALLOWED_LAYER_POSITIONS: RecusUiLayerPosition[] = ['freeform', 'flow']
 
 const ALLOWED_IMAGE_SHAPES: RecusUiImageShape[] = [
@@ -112,7 +117,32 @@ const ALLOWED_INPUT_TYPES: RecusUiInputType[] = [
   'email',
   'number',
   'phone',
+  'tel',
   'url',
+  'date',
+  'textarea',
+  'boolean',
+  'radio',
+]
+
+const ALLOWED_ANIMATION_PRESETS: RecusUiLayerAnimation['preset'][] = [
+  'fade-in',
+  'slide-up',
+  'slide-down',
+  'slide-left',
+  'slide-right',
+  'zoom-in',
+  'pop',
+  'bounce',
+  'pulse',
+]
+
+const ALLOWED_ANIMATION_EASINGS: RecusUiLayerAnimation['easing'][] = [
+  'linear',
+  'ease',
+  'ease-in',
+  'ease-out',
+  'ease-in-out',
 ]
 
 const ALLOWED_TEXT_ALIGNS: RecusUiTextAlign[] = [
@@ -279,11 +309,36 @@ const toLinearGradient = (value: unknown): RecusUiLinearGradient | null => {
   }
 }
 
+const toRadialGradient = (value: unknown): RecusUiRadialGradient | null => {
+  if (!isRecord(value)) return null
+  if (value.type !== 'radial') return null
+
+  const rawStops = Array.isArray(value.stops) ? value.stops : []
+  const stops = rawStops
+    .map(toGradientStop)
+    .filter((stop): stop is RecusUiGradientStop => !!stop)
+
+  if (stops.length < 2) return null
+
+  return {
+    type: 'radial',
+    angle: toFiniteNumber(value.angle) ?? 0,
+    stops,
+  }
+}
+
 const toButtonVariant = (value: unknown): RecusUiButtonVariant => {
   return typeof value === 'string' &&
     (ALLOWED_BUTTON_VARIANTS as string[]).includes(value)
     ? (value as RecusUiButtonVariant)
     : 'secondary'
+}
+
+const toButtonType = (value: unknown): RecusUiButtonType | undefined => {
+  return typeof value === 'string' &&
+    (ALLOWED_BUTTON_TYPES as string[]).includes(value)
+    ? (value as RecusUiButtonType)
+    : undefined
 }
 
 const toLayerPosition = (value: unknown): RecusUiLayerPosition => {
@@ -356,6 +411,27 @@ const toInputType = (value: unknown): RecusUiInputType => {
     (ALLOWED_INPUT_TYPES as string[]).includes(value)
     ? (value as RecusUiInputType)
     : 'text'
+}
+
+const toAnimation = (value: unknown): RecusUiLayerAnimation | undefined => {
+  if (!isRecord(value)) return undefined
+  const preset = typeof value.preset === 'string' &&
+    (ALLOWED_ANIMATION_PRESETS as string[]).includes(value.preset)
+    ? (value.preset as RecusUiLayerAnimation['preset'])
+    : undefined
+  if (!preset) return undefined
+
+  const easing = typeof value.easing === 'string' &&
+    (ALLOWED_ANIMATION_EASINGS as string[]).includes(value.easing)
+    ? (value.easing as RecusUiLayerAnimation['easing'])
+    : 'ease-out'
+
+  return {
+    preset,
+    durationMs: toNonNegativeNumber(value.durationMs) ?? 300,
+    delayMs: toNonNegativeNumber(value.delayMs) ?? 0,
+    easing,
+  }
 }
 
 const toTextAlign = (value: unknown): RecusUiTextAlign => {
@@ -513,11 +589,45 @@ const toImageStyle = (value: unknown): RecusUiImageLayerStyle => {
     borderWidth: toNonNegativeNumber(value.borderWidth) ?? DEFAULT_IMAGE_STYLE.borderWidth,
     borderRadius: toNonNegativeNumber(value.borderRadius) ?? DEFAULT_IMAGE_STYLE.borderRadius,
     objectPosition: toImagePosition(value.objectPosition) ?? DEFAULT_IMAGE_STYLE.objectPosition,
+    shadow: toShadow(value.shadow),
   }
 }
 
 const toInputStyle = (value: unknown): RecusUiInputLayerStyle => {
   if (!isRecord(value)) return DEFAULT_INPUT_STYLE
+  const optionStyle = isRecord(value.optionStyle)
+    ? {
+      selected: isRecord(value.optionStyle.selected)
+        ? {
+          backgroundColor: isHexColor(value.optionStyle.selected.backgroundColor)
+            ? value.optionStyle.selected.backgroundColor
+            : undefined,
+          textColor: isHexColor(value.optionStyle.selected.textColor)
+            ? value.optionStyle.selected.textColor
+            : undefined,
+          borderColor: isHexColor(value.optionStyle.selected.borderColor)
+            ? value.optionStyle.selected.borderColor
+            : undefined,
+        }
+        : undefined,
+      unselected: isRecord(value.optionStyle.unselected)
+        ? {
+          backgroundColor: isHexColor(value.optionStyle.unselected.backgroundColor)
+            ? value.optionStyle.unselected.backgroundColor
+            : undefined,
+          textColor: isHexColor(value.optionStyle.unselected.textColor)
+            ? value.optionStyle.unselected.textColor
+            : undefined,
+          borderColor: isHexColor(value.optionStyle.unselected.borderColor)
+            ? value.optionStyle.unselected.borderColor
+            : undefined,
+        }
+        : undefined,
+      borderWidth: toNonNegativeNumber(value.optionStyle.borderWidth),
+      borderRadius: toNonNegativeNumber(value.optionStyle.borderRadius),
+      gap: toNonNegativeNumber(value.optionStyle.gap),
+    }
+    : undefined
 
   return {
     fontSize: toNonNegativeNumber(value.fontSize) ?? DEFAULT_INPUT_STYLE.fontSize,
@@ -539,6 +649,7 @@ const toInputStyle = (value: unknown): RecusUiInputLayerStyle => {
     placeholderColor: isHexColor(value.placeholderColor)
       ? value.placeholderColor
       : DEFAULT_INPUT_STYLE.placeholderColor,
+    optionStyle,
   }
 }
 
@@ -572,7 +683,7 @@ const toBackground = (value: unknown): RecusUiBackground | null => {
   if (!isRecord(value)) return null
 
   if (value.type === 'gradient') {
-    const gradient = toLinearGradient(value.gradient)
+    const gradient = toLinearGradient(value.gradient) ?? toRadialGradient(value.gradient)
     if (!gradient) return null
     return { type: 'gradient', gradient }
   }
@@ -592,6 +703,17 @@ const toBackground = (value: unknown): RecusUiBackground | null => {
         url,
         fit: toImageFit(value.image.fit),
         position: toImagePosition(value.image.position),
+        overlay: isRecord(value.image.overlay)
+          ? {
+            color: isHexColor(value.image.overlay.color)
+              ? value.image.overlay.color
+              : '#000000',
+            opacity: Math.min(
+              1,
+              toNonNegativeNumber(value.image.overlay.opacity) ?? 0,
+            ),
+          }
+          : null,
       },
     } satisfies RecusUiImageBackground
   }
@@ -606,11 +728,13 @@ const toButtonLayer = (value: Record<string, unknown>, index: number): RecusUiBu
     id: toString(value.id) ?? `button-${index + 1}`,
     type: 'button',
     label: toString(value.label) ?? 'Button',
+    buttonType: toButtonType(value.buttonType),
     disabled: typeof value.disabled === 'boolean' || typeof value.disabled === 'string'
       ? value.disabled
       : false,
     variant: toButtonVariant(value.variant),
     layout: toButtonLayout(value.layout),
+    animation: toAnimation(value.animation),
     style: toButtonStyle(value.style),
     events: toButtonEvents(value.events),
   }
@@ -632,7 +756,27 @@ const toImageLayer = (value: Record<string, unknown>, index: number): RecusUiIma
       type: toString(value.source.type),
     },
     layout: toImageLayout(value.layout),
+    animation: toAnimation(value.animation),
     style: toImageStyle(value.style),
+  }
+}
+
+const toInputOption = (
+  value: unknown,
+  index: number,
+): NonNullable<RecusUiInputLayer['options']>[number] | null => {
+  if (typeof value === 'string') {
+    return { id: `option-${index + 1}`, label: value, value }
+  }
+
+  if (!isRecord(value)) return null
+  const optionValue = toString(value.value)
+  if (!optionValue) return null
+
+  return {
+    id: toString(value.id) ?? `option-${index + 1}`,
+    label: toString(value.label) ?? optionValue,
+    value: optionValue,
   }
 }
 
@@ -649,7 +793,21 @@ const toInputLayer = (value: Record<string, unknown>, index: number): RecusUiInp
     required: typeof value.required === 'boolean' ? value.required : false,
     inputType: toInputType(value.inputType),
     placeholder: toString(value.placeholder),
+    options: Array.isArray(value.options)
+      ? value.options
+        .map(toInputOption)
+        .filter((option): option is NonNullable<RecusUiInputLayer['options']>[number] => !!option)
+      : undefined,
+    selectionMode: value.selectionMode === 'multiple' ? 'multiple' : 'single',
+    selectedValues: Array.isArray(value.selectedValues)
+      ? value.selectedValues.filter((selected): selected is string => {
+        return typeof selected === 'string'
+      })
+      : undefined,
+    minLength: toNonNegativeNumber(value.minLength),
+    maxLength: toNonNegativeNumber(value.maxLength),
     layout: toInputLayout(value.layout),
+    animation: toAnimation(value.animation),
     style: toInputStyle(value.style),
   }
 }
@@ -665,6 +823,7 @@ const toTextLayer = (value: Record<string, unknown>, index: number): RecusUiText
     type: 'text',
     content,
     layout: toTextLayout(value.layout),
+    animation: toAnimation(value.animation),
     style: toTextStyle(value.style),
   }
 }

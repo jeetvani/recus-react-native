@@ -19,7 +19,7 @@ export type RecusUser = {
   [key: string]: unknown
 }
 
-export type OnboardingInputValue = string | boolean
+export type OnboardingInputValue = string | boolean | string[]
 
 export type RecusScreenAnalytics = {
   timeSpentMs: number
@@ -39,7 +39,11 @@ const toOnboardingValues = (
     ] => {
       const [key, value] = entry
       if (key === 'currentScreenId') return false
-      return typeof value === 'string' || typeof value === 'boolean'
+      return (
+        typeof value === 'string' ||
+        typeof value === 'boolean' ||
+        (Array.isArray(value) && value.every(item => typeof item === 'string'))
+      )
     }),
   )
 }

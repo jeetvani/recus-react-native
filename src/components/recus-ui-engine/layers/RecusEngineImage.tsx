@@ -1,6 +1,7 @@
 import React, { memo, useMemo } from 'react'
-import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
+import { Animated, StyleProp, StyleSheet, ViewStyle } from 'react-native'
 import { Image as ExpoImage } from 'expo-image'
+import { useRecusLayerAnimation } from '../animation'
 import {
   RecusUiImageFit,
   RecusUiImageLayer,
@@ -73,9 +74,23 @@ const positionToContentPosition = (
 
 function RecusEngineImageImpl({ layer }: RecusEngineImageProps) {
   const { layout, source: imageSource, style } = layer
+  const animationStyle = useRecusLayerAnimation(layer.animation)
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     const borderRadius = style.shape === 'circle' ? 9999 : style.borderRadius
+
+    const shadowStyle = style.shadow
+      ? {
+        shadowColor: style.shadow.color,
+        shadowOffset: {
+          width: style.shadow.x,
+          height: style.shadow.y,
+        },
+        shadowOpacity: 1,
+        shadowRadius: style.shadow.blur,
+        elevation: Math.max(style.shadow.blur, Math.abs(style.shadow.y)),
+      }
+      : null
 
     return [
       layout.position === 'freeform' ? styles.freeform : null,
@@ -91,6 +106,7 @@ function RecusEngineImageImpl({ layer }: RecusEngineImageProps) {
         borderRadius,
         aspectRatio: style.aspectRatio === 'free' ? undefined : style.aspectRatio,
       },
+      shadowStyle,
       styles.clip,
     ]
   }, [layout, style])
@@ -103,7 +119,7 @@ function RecusEngineImageImpl({ layer }: RecusEngineImageProps) {
   )
 
   return (
-    <View pointerEvents="none" style={containerStyle}>
+    <Animated.View pointerEvents="none" style={[containerStyle, animationStyle]}>
       <ExpoImage
         accessibilityLabel={layer.alt}
         source={source}
@@ -115,7 +131,7 @@ function RecusEngineImageImpl({ layer }: RecusEngineImageProps) {
         recyclingKey={imageSource.url}
         style={styles.image}
       />
-    </View>
+    </Animated.View>
   )
 }
 

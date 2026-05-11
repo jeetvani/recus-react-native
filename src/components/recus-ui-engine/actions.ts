@@ -18,6 +18,8 @@ export const RECUS_ENGINE_ACTION_IDS = {
 export type RecusEngineActionId =
   (typeof RECUS_ENGINE_ACTION_IDS)[keyof typeof RECUS_ENGINE_ACTION_IDS]
 
+export type RecusEngineAction = Record<string, unknown>
+
 export type RecusEngineActions = {
   onContinue: () => void
   onSkip: () => void
@@ -25,6 +27,7 @@ export type RecusEngineActions = {
   values: Record<string, OnboardingInputValue>
   inputRules: Record<string, { maxLength?: number }>
   onInputChange: (inputId: string, value: OnboardingInputValue) => void
+  runActions: (actions: RecusEngineAction[]) => void
 }
 
 const noop = () => {}
@@ -36,6 +39,7 @@ const DEFAULT_ACTIONS: RecusEngineActions = {
   values: {},
   inputRules: {},
   onInputChange: noop,
+  runActions: noop,
 }
 
 export const RecusEngineActionsContext =

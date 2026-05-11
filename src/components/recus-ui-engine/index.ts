@@ -44,6 +44,7 @@ export type {
   RecusUiImagePosition,
   RecusUiImageShape,
   RecusUiLayer,
+  RecusUiLayerAnimation,
   RecusUiLayerDimension,
   RecusUiLayerLayout,
   RecusUiLayerPosition,

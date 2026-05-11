@@ -8,7 +8,17 @@ export type AppOnboardingInputType =
   | 'email'
   | 'number'
   | 'phone'
+  | 'tel'
   | 'url'
+  | 'date'
+  | 'textarea'
+  | 'radio'
+
+export type AppOnboardingValidationRule = {
+  type: string
+  value?: unknown
+  message?: string
+}
 
 export type AppOnboardingInputConfig = {
   id: string
@@ -18,11 +28,21 @@ export type AppOnboardingInputConfig = {
   placeholder?: string
   maxLength?: number
   minLength?: number
+  options?: string[]
+  defaultValue?: unknown
+  validation?: {
+    rules?: AppOnboardingValidationRule[]
+  }
+  metadata?: Record<string, unknown>
 }
 
 export type AppOnboardingTransition = {
   to: string
+  label?: string
   backAllowed?: boolean
+  condition?: string | null
+  analytics?: Record<string, unknown>
+  metadata?: Record<string, unknown>
 }
 
 export type AppOnboardingUi = Record<string, unknown>
@@ -34,8 +54,11 @@ export type AppOnboardingScreenConfig = {
   html?: boolean
   inputs?: AppOnboardingInputConfig[]
   transitions?: AppOnboardingTransition[]
+  events?: Record<string, unknown>
+  analytics?: Record<string, unknown>
   ui?: AppOnboardingUi | null
   conditions?: Record<string, unknown> | null
+  metadata?: Record<string, unknown>
 }
 
 export type AppOnboardingData = {
@@ -66,7 +89,11 @@ const toInputType = (value: unknown): AppOnboardingInputType => {
     value === 'email' ||
     value === 'number' ||
     value === 'phone' ||
-    value === 'url'
+    value === 'tel' ||
+    value === 'url' ||
+    value === 'date' ||
+    value === 'textarea' ||
+    value === 'radio'
   ) {
     return value
   }
@@ -85,6 +112,23 @@ const toInputConfig = (value: unknown): AppOnboardingInputConfig | null => {
     placeholder: typeof value.placeholder === 'string' ? value.placeholder : undefined,
     maxLength: toNumberOrUndefined(value.maxLength),
     minLength: toNumberOrUndefined(value.minLength),
+    options: Array.isArray(value.options)
+      ? value.options.filter((option): option is string => typeof option === 'string')
+      : undefined,
+    defaultValue: value.defaultValue,
+    validation: isRecord(value.validation) && Array.isArray(value.validation.rules)
+      ? {
+        rules: value.validation.rules
+          .filter(isRecord)
+          .map(rule => ({
+            type: typeof rule.type === 'string' ? rule.type : '',
+            value: rule.value,
+            message: typeof rule.message === 'string' ? rule.message : undefined,
+          }))
+          .filter(rule => rule.type.length > 0),
+      }
+      : undefined,
+    metadata: isRecord(value.metadata) ? value.metadata : undefined,
   }
 }
 
@@ -93,7 +137,13 @@ const toTransition = (value: unknown): AppOnboardingTransition | null => {
 
   return {
     to: value.to,
+    label: typeof value.label === 'string' ? value.label : undefined,
     backAllowed: typeof value.backAllowed === 'boolean' ? value.backAllowed : undefined,
+    condition: typeof value.condition === 'string' || value.condition === null
+      ? value.condition
+      : undefined,
+    analytics: isRecord(value.analytics) ? value.analytics : undefined,
+    metadata: isRecord(value.metadata) ? value.metadata : undefined,
   }
 }
 
@@ -112,8 +162,11 @@ const toScreenConfig = (value: unknown): AppOnboardingScreenConfig | null => {
     transitions: rawTransitions
       .map(toTransition)
       .filter((transition): transition is AppOnboardingTransition => !!transition),
+    events: isRecord(value.events) ? value.events : undefined,
+    analytics: isRecord(value.analytics) ? value.analytics : undefined,
     ui: isRecord(value.ui) ? (value.ui as AppOnboardingUi) : null,
     conditions: isRecord(value.conditions) ? (value.conditions as Record<string, unknown>) : null,
+    metadata: isRecord(value.metadata) ? value.metadata : undefined,
   }
 }
 

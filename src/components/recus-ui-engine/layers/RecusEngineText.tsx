@@ -1,5 +1,8 @@
 import React, { memo, useMemo } from 'react'
-import { StyleProp, StyleSheet, Text, TextStyle, ViewStyle } from 'react-native'
+import { Animated, StyleProp, StyleSheet, TextStyle, ViewStyle } from 'react-native'
+import { useRecusLayerAnimation } from '../animation'
+import { interpolateRecusTemplate } from '../../../utils/recusExpressions'
+import { useRecusEngineActions } from '../actions'
 import {
   RecusUiLayerDimension,
   RecusUiTextDecoration,
@@ -52,6 +55,11 @@ const toTextDecorationLine = (
 
 function RecusEngineTextImpl({ layer }: RecusEngineTextProps) {
   const { layout, style, content } = layer
+  const { values } = useRecusEngineActions()
+  const animationStyle = useRecusLayerAnimation(layer.animation)
+  const resolvedContent = useMemo(() => {
+    return interpolateRecusTemplate(content, values)
+  }, [content, values])
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     return [
@@ -83,7 +91,7 @@ function RecusEngineTextImpl({ layer }: RecusEngineTextProps) {
   }, [style])
 
   return (
-    <Text
+    <Animated.Text
       // Text layers are visual-only; never block taps on the buttons
       // beneath them.
       pointerEvents="none"
@@ -95,10 +103,10 @@ function RecusEngineTextImpl({ layer }: RecusEngineTextProps) {
       // Accessibility: announce as plain text but stay non-interactive.
       accessible
       accessibilityRole="text"
-      style={[containerStyle, textStyle]}
+      style={[containerStyle, textStyle, animationStyle]}
     >
-      {content}
-    </Text>
+      {resolvedContent}
+    </Animated.Text>
   )
 }
 

@@ -1,12 +1,12 @@
 import React, { memo, useMemo } from 'react'
 import {
   GestureResponderEvent,
+  Animated,
   Pressable,
   StyleProp,
   StyleSheet,
   Text,
   TextStyle,
-  View,
   ViewStyle,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -20,6 +20,8 @@ import {
   RECUS_ENGINE_ACTION_IDS,
   useRecusEngineActions,
 } from '../actions'
+import { useRecusLayerAnimation } from '../animation'
+import { evaluateRecusExpression } from '../../../utils/recusExpressions'
 
 type RecusEngineButtonProps = {
   layer: RecusUiButtonLayer
@@ -56,8 +58,11 @@ const isLinearGradientBackground = (
 
 function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
   const { layout, style } = layer
-  const disabled = layer.disabled === true
-  const { onContinue, onSkip, onBack } = useRecusEngineActions()
+  const { onContinue, onSkip, onBack, values, runActions } = useRecusEngineActions()
+  const disabled = typeof layer.disabled === 'string'
+    ? evaluateRecusExpression(layer.disabled, values)
+    : layer.disabled === true
+  const animationStyle = useRecusLayerAnimation(layer.animation)
 
   const containerStyle = useMemo<StyleProp<ViewStyle>>(() => {
     const shadowStyle = style.shadow
@@ -111,25 +116,33 @@ function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
   }, [style])
 
   const handlePress = (_event: GestureResponderEvent) => {
-    // Reserved layer ids drive the host-supplied onboarding actions so the
-    // same UI schema can express both "Continue" (validate + advance) and
-    // "Skip" (advance without validation) flows.
-    if (layer.id === RECUS_ENGINE_ACTION_IDS.continue) {
+    if (layer.events?.onTap) {
+      runActions(layer.events.onTap)
+      const hasExplicitNavigation = layer.events.onTap.some(action => {
+        return action.action === 'navigate' || action.action === 'complete'
+      })
+      if (hasExplicitNavigation) return
+    }
+
+    // Prefer the semantic button type from the schema, while retaining
+    // reserved ids as a fallback for older payloads.
+    const actionType = layer.buttonType ?? layer.id
+
+    if (actionType === RECUS_ENGINE_ACTION_IDS.continue) {
       onContinue()
       return
     }
 
-    if (layer.id === RECUS_ENGINE_ACTION_IDS.skip) {
+    if (actionType === RECUS_ENGINE_ACTION_IDS.skip) {
       onSkip()
       return
     }
 
-    if (layer.id === RECUS_ENGINE_ACTION_IDS.back) {
+    if (actionType === RECUS_ENGINE_ACTION_IDS.back) {
       onBack()
       return
     }
 
-    // `events.onTap` is stored for the runtime action system; execution is not wired yet.
   }
 
   const content = (
@@ -139,7 +152,7 @@ function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
   )
 
   return (
-    <View style={containerStyle}>
+    <Animated.View style={[containerStyle, animationStyle]}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ disabled }}
@@ -155,7 +168,7 @@ function RecusEngineButtonImpl({ layer }: RecusEngineButtonProps) {
           content
         )}
       </Pressable>
-    </View>
+    </Animated.View>
   )
 }
 

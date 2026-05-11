@@ -18,7 +18,7 @@ type BackgroundRendererProps = {
 
 /**
  * Switches between the three supported background variants:
- *  - `gradient` -> linear gradient via expo-linear-gradient
+ *  - `gradient` -> linear/radial gradient renderer
  *  - `solid`    -> flat color view
  *  - `image`    -> remote image with fit/position
  *

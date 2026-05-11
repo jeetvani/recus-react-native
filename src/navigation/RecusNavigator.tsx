@@ -8,6 +8,7 @@ import {
   BackHandler,
   PanResponder,
   Platform,
+  ViewStyle,
 } from 'react-native'
 import RecusScreen, { RecusScreenConfig } from '../screens/RecusScreen'
 import { RecusNavContext } from './RecusNavigationContext'
@@ -297,20 +298,29 @@ export default function RecusNavigator({
   const panHandlers =
     Platform.OS === 'ios' && canGoBack ? iosBackPanResponder.panHandlers : undefined
 
-  // ─── Idle: single screen ───────────────────────────────────────────
-
-  if (transition.type === 'idle') {
-    return (
-      <RecusNavContext.Provider value={ctx}>
-        <View style={StyleSheet.absoluteFill} {...panHandlers}>
-          {renderScreen(currentRoute)}
-        </View>
-      </RecusNavContext.Provider>
-    )
-  }
-
-  // ─── Transition: two layers with slide animation ───────────────────
-
+  // ─── Stable, keyed render structure ──────────────────────────────────
+  //
+  // The naive approach toggles between "single screen as a direct child of
+  // View" (idle) and "two Animated.Views wrapping bg/fg screens"
+  // (transitioning). React reconciles by position + element type, so at
+  // every transition→idle handoff the foreground screen's wrapping
+  // element type changes (`Animated.View` → screen → `Animated.View`),
+  // which unmounts + remounts every layer.
+  //
+  // For the Recus UI engine that means every layer's
+  // `useRecusLayerAnimation` `useEffect` fires again the instant the
+  // slide finishes, restarting all entry animations from their initial
+  // state — exactly the "half-played, then the whole thing appears
+  // again" jitter we used to see on every screen after the first.
+  //
+  // To keep the foreground screen mounted across the transition, we
+  // always render through a stable structure: an array of
+  // `<Animated.View key={screenId}>` wrappers. Using the screen id as
+  // the React key means the same wrapper instance is reused regardless
+  // of whether a screen is currently the bg, fg, or the only screen on
+  // the stack. The only thing that changes across renders is the
+  // wrapper's style (transform / shadow), never the wrapped subtree.
+  const isTransitioning = transition.type !== 'idle'
   const isPush = transition.type === 'push'
 
   const fgTranslateX = isPush
@@ -343,44 +353,71 @@ export default function RecusNavigator({
         outputRange: [0.25, 0],
       })
 
-  const bgId = isPush ? transition.from : transition.to
-  const fgId = isPush ? transition.to : transition.from
+  type VisibleScreen = { id: string; role: 'bg' | 'fg' }
+  let visibleScreens: VisibleScreen[]
+  if (transition.type === 'idle') {
+    visibleScreens = [{ id: currentRoute, role: 'fg' }]
+  } else if (transition.type === 'push') {
+    visibleScreens = [
+      { id: transition.from, role: 'bg' },
+      { id: transition.to, role: 'fg' },
+    ]
+  } else {
+    visibleScreens = [
+      { id: transition.to, role: 'bg' },
+      { id: transition.from, role: 'fg' },
+    ]
+  }
+
+  const renderedScreens = visibleScreens.map(({ id, role }) => {
+    const isFg = role === 'fg'
+    let wrapperStyle: ViewStyle | null = null
+    if (isTransitioning) {
+      wrapperStyle = isFg
+        ? {
+            transform: [{ translateX: fgTranslateX }],
+            shadowColor: SHADOW_COLOR,
+            shadowOffset: SHADOW_OFFSET,
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+            elevation: 8,
+          }
+        : { transform: [{ translateX: bgTranslateX }] }
+    }
+
+    const overlay = isTransitioning && !isFg ? (
+      <Animated.View
+        style={[styles.overlay, { opacity: overlayOpacity }]}
+        pointerEvents="none"
+      />
+    ) : null
+
+    return (
+      <Animated.View
+        key={id}
+        style={[StyleSheet.absoluteFill, wrapperStyle]}
+      >
+        {renderScreen(id)}
+        {overlay}
+      </Animated.View>
+    )
+  })
 
   return (
     <RecusNavContext.Provider value={ctx}>
       <View style={StyleSheet.absoluteFill} {...panHandlers}>
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            { transform: [{ translateX: bgTranslateX }] },
-          ]}
-        >
-          {renderScreen(bgId)}
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: '#000', opacity: overlayOpacity },
-            ]}
-            pointerEvents="none"
-          />
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              transform: [{ translateX: fgTranslateX }],
-              shadowColor: '#000',
-              shadowOffset: { width: -4, height: 0 },
-              shadowOpacity: 0.2,
-              shadowRadius: 12,
-              elevation: 8,
-            },
-          ]}
-        >
-          {renderScreen(fgId)}
-        </Animated.View>
+        {renderedScreens}
       </View>
     </RecusNavContext.Provider>
   )
 }
+
+const SHADOW_COLOR = '#000'
+const SHADOW_OFFSET = { width: -4, height: 0 }
+
+const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: SHADOW_COLOR,
+  },
+})

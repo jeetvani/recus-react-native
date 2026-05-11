@@ -1,7 +1,18 @@
 import React, { useMemo } from 'react'
-import { StyleSheet, ViewStyle } from 'react-native'
+import { StyleSheet, View, ViewStyle } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
-import { RecusUiGradientBackground, RecusUiGradientStop } from '../types'
+import Svg, {
+  Defs,
+  RadialGradient,
+  Rect,
+  Stop,
+} from 'react-native-svg'
+import {
+  RecusUiGradientBackground,
+  RecusUiGradientStop,
+  RecusUiLinearGradient,
+  RecusUiRadialGradient,
+} from '../types'
 
 type GradientBackgroundProps = {
   background: RecusUiGradientBackground
@@ -39,6 +50,30 @@ export function GradientBackground({
 }: GradientBackgroundProps) {
   const { gradient } = background
 
+  if (gradient.type === 'radial') {
+    return (
+      <RadialGradientBackground gradient={gradient} style={style}>
+        {children}
+      </RadialGradientBackground>
+    )
+  }
+
+  return (
+    <LinearGradientBackground gradient={gradient} style={style}>
+      {children}
+    </LinearGradientBackground>
+  )
+}
+
+function LinearGradientBackground({
+  gradient,
+  style,
+  children,
+}: {
+  gradient: RecusUiLinearGradient
+  style?: ViewStyle
+  children?: React.ReactNode
+}) {
   const { colors, locations, start, end } = useMemo(() => {
     const sortedStops = sortStops(gradient.stops)
     const stopColors = sortedStops.map(stop => stop.color)
@@ -63,6 +98,49 @@ export function GradientBackground({
     >
       {children}
     </LinearGradient>
+  )
+}
+
+function RadialGradientBackground({
+  gradient,
+  style,
+  children,
+}: {
+  gradient: RecusUiRadialGradient
+  style?: ViewStyle
+  children?: React.ReactNode
+}) {
+  const stops = useMemo(() => sortStops(gradient.stops), [gradient.stops])
+
+  return (
+    <View style={[styles.fill, style]}>
+      <Svg height="100%" style={StyleSheet.absoluteFill} width="100%">
+        <Defs>
+          <RadialGradient
+            id="recus-radial-background"
+            cx="50%"
+            cy="50%"
+            r="75%"
+            fx="50%"
+            fy="50%"
+          >
+            {stops.map((stop, index) => (
+              <Stop
+                key={`${stop.color}-${stop.position}-${index}`}
+                offset={`${Math.max(0, Math.min(1, stop.position)) * 100}%`}
+                stopColor={stop.color}
+              />
+            ))}
+          </RadialGradient>
+        </Defs>
+        <Rect
+          height="100%"
+          width="100%"
+          fill="url(#recus-radial-background)"
+        />
+      </Svg>
+      {children}
+    </View>
   )
 }
 

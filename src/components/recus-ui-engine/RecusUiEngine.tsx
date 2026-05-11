@@ -53,7 +53,9 @@ export function RecusUiEngine({ UI, actions }: RecusUiEngineProps) {
   const tree = (
     <BackgroundRenderer background={schema.background} style={styles.fill}>
       <View style={styles.layerRoot} pointerEvents="box-none">
-        {schema.layers.map(layer => {
+        {[...schema.layers].sort((a, b) => {
+          return (a.layout.zIndex ?? 0) - (b.layout.zIndex ?? 0)
+        }).map(layer => {
           if (isButtonLayer(layer)) {
             return <RecusEngineButton key={layer.id} layer={layer} />
           }

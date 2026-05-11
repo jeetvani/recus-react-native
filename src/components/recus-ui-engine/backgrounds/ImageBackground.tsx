@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { StyleSheet, ViewStyle } from 'react-native'
+import { StyleSheet, View, ViewStyle } from 'react-native'
 import { ImageBackground as ExpoImageBackground } from 'expo-image'
 import {
   RecusUiImageBackground,
@@ -91,6 +91,18 @@ export function ImageBackground({
       recyclingKey={image.url}
       style={[styles.fill, style]}
     >
+      {image.overlay ? (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: image.overlay.color,
+              opacity: image.overlay.opacity,
+            },
+          ]}
+        />
+      ) : null}
       {children}
     </ExpoImageBackground>
   )

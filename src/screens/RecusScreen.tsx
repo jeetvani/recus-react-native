@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   View,
   Text,
@@ -17,15 +17,25 @@ import {
 import { RecusEngineActions, RecusUiEngine } from '../components/recus-ui-engine'
 import { useRecus } from '../context/RecusContext'
 import { useRecusNavigation } from '../navigation/RecusNavigationContext'
+import {
+  evaluateRecusExpression,
+  interpolateRecusTemplate,
+} from '../utils/recusExpressions'
 
 // ─── JSON Config Types ────────────────────────────────────────────────────────
 
 export type RecusScreenConfig = AppOnboardingScreenConfig
 
 const BOOLEAN_INPUT_TYPE = 'boolean' as const
+const RADIO_INPUT_TYPE = 'radio' as const
+const MULTIPLE_SELECTION_MODE = 'multiple' as const
+const SINGLE_SELECTION_MODE = 'single' as const
+const STRING_TYPE = 'string' as const
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_PATTERN = /^\+?[\d\s().-]{7,}$/
 const URL_PATTERN = /^https?:\/\/\S+\.\S+$/
+
+const isString = (value: unknown): value is string => typeof value === STRING_TYPE
 
 const getInputLabel = (input: AppOnboardingInputConfig): string => {
   return input.label.trim() || input.placeholder?.trim() || input.id
@@ -38,6 +48,7 @@ const getKeyboardType = (inputType: AppOnboardingInputType) => {
     case 'number':
       return 'numeric'
     case 'phone':
+    case 'tel':
       return 'phone-pad'
     case 'url':
       return 'url'
@@ -53,6 +64,7 @@ type RecusScreenProps = {
 }
 
 export default function RecusScreen({ config }: RecusScreenProps) {
+  const enteredScreenIdRef = useRef<string | null>(null)
   const {
     user,
     markComplete,
@@ -62,7 +74,11 @@ export default function RecusScreen({ config }: RecusScreenProps) {
   } = useRecus()
   const { navigate, goBack } = useRecusNavigation()
   const transitions = config.transitions ?? []
-  const nextTransition = transitions[0]
+  const nextTransition = useMemo(() => {
+    return transitions.find(transition => {
+      return evaluateRecusExpression(transition.condition, onboardingValues)
+    })
+  }, [onboardingValues, transitions])
   const inputRules = useMemo(() => {
     return Object.fromEntries(
       (config.inputs ?? []).map(input => [
@@ -72,19 +88,38 @@ export default function RecusScreen({ config }: RecusScreenProps) {
     )
   }, [config.inputs])
 
-  const validateInputs = useCallback((): boolean => {
-    for (const input of config.inputs ?? []) {
+  const validateInputs = useCallback((fieldIds?: string[]): boolean => {
+    const inputs = fieldIds
+      ? (config.inputs ?? []).filter(input => fieldIds.includes(input.id))
+      : config.inputs ?? []
+
+    for (const input of inputs) {
       const label = getInputLabel(input)
+      const rawValue = onboardingValues[input.id]
 
       if (input.type === BOOLEAN_INPUT_TYPE) {
-        if (input.required && onboardingValues[input.id] !== true) {
+        if (input.required && rawValue !== true) {
           Alert.alert('Incomplete Details', `${label} is required.`)
           return false
         }
         continue
       }
 
-      const rawValue = onboardingValues[input.id]
+      if (input.type === RADIO_INPUT_TYPE) {
+        const selectionMode = input.metadata?.selectionMode === 'multiple'
+          ? MULTIPLE_SELECTION_MODE
+          : SINGLE_SELECTION_MODE
+        const hasValue = selectionMode === 'multiple'
+          ? Array.isArray(rawValue) && rawValue.length > 0
+          : typeof rawValue === 'string' && rawValue.trim().length > 0
+
+        if (input.required && !hasValue) {
+          Alert.alert('Incomplete Details', `${label} is required.`)
+          return false
+        }
+        continue
+      }
+
       const value = typeof rawValue === 'string' ? rawValue.trim() : ''
 
       if (input.required && value.length === 0) {
@@ -114,7 +149,7 @@ export default function RecusScreen({ config }: RecusScreenProps) {
         return false
       }
 
-      if (input.type === 'phone' && !PHONE_PATTERN.test(value)) {
+      if ((input.type === 'phone' || input.type === 'tel') && !PHONE_PATTERN.test(value)) {
         Alert.alert('Invalid Details', `${label} must be a valid phone number.`)
         return false
       }
@@ -123,10 +158,105 @@ export default function RecusScreen({ config }: RecusScreenProps) {
         Alert.alert('Invalid Details', `${label} must be a valid URL.`)
         return false
       }
+
+      for (const rule of input.validation?.rules ?? []) {
+        if (rule.type === 'min' && Number(value) < Number(rule.value)) {
+          Alert.alert('Invalid Details', rule.message ?? `${label} is too small.`)
+          return false
+        }
+
+        if (rule.type === 'max' && Number(value) > Number(rule.value)) {
+          Alert.alert('Invalid Details', rule.message ?? `${label} is too large.`)
+          return false
+        }
+
+        if (rule.type === 'minLength' && value.length < Number(rule.value)) {
+          Alert.alert('Incomplete Details', rule.message ?? `${label} is too short.`)
+          return false
+        }
+      }
     }
 
     return true
   }, [config.inputs, onboardingValues])
+
+  const runActions = useCallback<RecusEngineActions['runActions']>(
+    actions => {
+      for (const action of actions) {
+        if (action.action === 'navigate' && typeof action.to === 'string') {
+          navigate(action.to)
+          continue
+        }
+
+        if (action.action === 'validate') {
+          const fieldIds = Array.isArray(action.fieldIds)
+            ? action.fieldIds.filter((fieldId): fieldId is string => typeof fieldId === 'string')
+            : undefined
+          validateInputs(fieldIds)
+          continue
+        }
+
+        if (action.action === 'submit') {
+          submitScreen(config.id)
+          continue
+        }
+
+        if (action.action === 'complete') {
+          submitScreen(config.id)
+          markComplete()
+        }
+      }
+    },
+    [config.id, markComplete, navigate, submitScreen, validateInputs],
+  )
+
+  useEffect(() => {
+    for (const input of config.inputs ?? []) {
+      if (onboardingValues[input.id] !== undefined || input.defaultValue === undefined) {
+        continue
+      }
+
+      const defaultValue = input.defaultValue
+      if (
+        typeof defaultValue === 'string' ||
+        typeof defaultValue === 'boolean' ||
+        (Array.isArray(defaultValue) && defaultValue.every(item => typeof item === 'string'))
+      ) {
+        setOnboardingValue(input.id, defaultValue)
+      }
+    }
+  }, [config.inputs, onboardingValues, setOnboardingValue])
+
+  useEffect(() => {
+    const expression = typeof config.conditions?.expression === 'string'
+      ? config.conditions.expression
+      : undefined
+    const elseGoTo = typeof config.conditions?.elseGoTo === 'string'
+      ? config.conditions.elseGoTo
+      : undefined
+
+    if (expression && elseGoTo && !evaluateRecusExpression(expression, onboardingValues)) {
+      navigate(elseGoTo)
+      return
+    }
+
+    if (enteredScreenIdRef.current === config.id) return
+    enteredScreenIdRef.current = config.id
+
+    const onEnter = Array.isArray(config.events?.onEnter)
+      ? config.events.onEnter.filter((action): action is Record<string, unknown> => {
+        return typeof action === 'object' && action !== null && !Array.isArray(action)
+      })
+      : []
+    if (onEnter.length > 0) runActions(onEnter)
+  }, [
+    config.conditions,
+    config.id,
+    config.events,
+    navigate,
+    onboardingValues,
+    runActions,
+  ])
 
   const advanceToNext = useCallback(() => {
     if (nextTransition?.to) {
@@ -145,8 +275,14 @@ export default function RecusScreen({ config }: RecusScreenProps) {
     if (!validateInputs()) return
 
     submitScreen(config.id)
+    const onSubmit = Array.isArray(config.events?.onSubmit)
+      ? config.events.onSubmit.filter((action): action is Record<string, unknown> => {
+        return typeof action === 'object' && action !== null && !Array.isArray(action)
+      })
+      : []
+    if (onSubmit.length > 0) runActions(onSubmit)
     advanceToNext()
-  }, [advanceToNext, config.id, submitScreen, validateInputs])
+  }, [advanceToNext, config.events, config.id, runActions, submitScreen, validateInputs])
 
   const handleSkip = useCallback(() => {
     advanceToNext()
@@ -162,6 +298,7 @@ export default function RecusScreen({ config }: RecusScreenProps) {
       values: onboardingValues,
       inputRules,
       onInputChange: setOnboardingValue,
+      runActions,
     }),
     [
       goBack,
@@ -169,6 +306,7 @@ export default function RecusScreen({ config }: RecusScreenProps) {
       handleSkip,
       inputRules,
       onboardingValues,
+      runActions,
       setOnboardingValue,
     ],
   )
@@ -183,8 +321,13 @@ export default function RecusScreen({ config }: RecusScreenProps) {
 
   const resolveText = (text?: string): string | undefined => {
     if (!text) return undefined
-    return text.replace(/\{\{user\.(\w+)\}\}/g, (_, key) => {
+    const withUserValues = text.replace(/\{\{user\.(\w+)\}\}/g, (_, key) => {
       return user?.[key] ? String(user[key]) : ''
+    })
+
+    return interpolateRecusTemplate(withUserValues, {
+      ...onboardingValues,
+      user: user ?? {},
     })
   }
 
@@ -219,6 +362,56 @@ export default function RecusScreen({ config }: RecusScreenProps) {
             )
           }
 
+          if (input.type === RADIO_INPUT_TYPE) {
+            const rawValue = onboardingValues[input.id]
+            const selectionMode = input.metadata?.selectionMode === MULTIPLE_SELECTION_MODE ? MULTIPLE_SELECTION_MODE : SINGLE_SELECTION_MODE
+            const selectedValues: string[] = Array.isArray(rawValue)
+              ? rawValue.filter(isString)
+              : isString(rawValue)
+                ? [rawValue]
+                : []
+
+            return (
+              <View key={input.id} style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{input.label}</Text>
+                {(input.options ?? []).map(option => {
+                  const selected = selectedValues.includes(option)
+                  return (
+                    <TouchableOpacity
+                      key={option}
+                      accessibilityRole={selectionMode === MULTIPLE_SELECTION_MODE ? 'checkbox' : RADIO_INPUT_TYPE}
+                      accessibilityState={{ checked: selected }}
+                      style={[
+                        styles.choice,
+                        selected ? styles.choiceSelected : null,
+                      ]}
+                      onPress={() => {
+                        if (selectionMode === MULTIPLE_SELECTION_MODE) {
+                          const nextValues = selected
+                            ? selectedValues.filter(item => item !== option)
+                            : [...selectedValues, option]
+                          setOnboardingValue(input.id, nextValues)
+                          return
+                        }
+
+                        setOnboardingValue(input.id, option)
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.choiceText,
+                          selected ? styles.choiceTextSelected : null,
+                        ]}
+                      >
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            )
+          }
+
           const textValue = onboardingValues[input.id]
           return (
             <View key={input.id} style={styles.inputGroup}>
@@ -238,8 +431,9 @@ export default function RecusScreen({ config }: RecusScreenProps) {
                     ? 'none'
                     : 'sentences'
                 }
-                autoCorrect={input.type === 'text'}
+                autoCorrect={input.type === 'text' || input.type === 'textarea'}
                 maxLength={input.maxLength}
+                multiline={input.type === 'textarea'}
               />
             </View>
           )
@@ -327,6 +521,27 @@ const styles = StyleSheet.create({
   booleanLabelContainer: {
     flex: 1,
     paddingRight: 12,
+  },
+  choice: {
+    borderColor: '#E5E7EB',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  choiceSelected: {
+    borderColor: '#111827',
+    backgroundColor: '#111827',
+  },
+  choiceText: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  choiceTextSelected: {
+    color: '#FFFFFF',
   },
   actions: {
     width: '100%',

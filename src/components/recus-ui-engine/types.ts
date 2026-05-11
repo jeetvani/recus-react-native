@@ -22,9 +22,15 @@ export type RecusUiLinearGradient = {
   stops: RecusUiGradientStop[]
 }
 
+export type RecusUiRadialGradient = {
+  type: 'radial'
+  angle: number
+  stops: RecusUiGradientStop[]
+}
+
 export type RecusUiGradientBackground = {
   type: 'gradient'
-  gradient: RecusUiLinearGradient
+  gradient: RecusUiLinearGradient | RecusUiRadialGradient
 }
 
 export type RecusUiSolidBackground = {
@@ -33,6 +39,7 @@ export type RecusUiSolidBackground = {
 }
 
 export type RecusUiButtonVariant = 'primary' | 'secondary' | 'ghost' | 'link'
+export type RecusUiButtonType = 'continue' | 'skip' | 'back'
 
 export type RecusUiLayerPosition = 'freeform' | 'flow'
 
@@ -45,6 +52,31 @@ export type RecusUiLayerLayout = {
   width: RecusUiLayerDimension
   height: RecusUiLayerDimension
   zIndex?: number
+}
+
+export type RecusUiAnimationPreset =
+  | 'fade-in'
+  | 'slide-up'
+  | 'slide-down'
+  | 'slide-left'
+  | 'slide-right'
+  | 'zoom-in'
+  | 'pop'
+  | 'bounce'
+  | 'pulse'
+
+export type RecusUiAnimationEasing =
+  | 'linear'
+  | 'ease'
+  | 'ease-in'
+  | 'ease-out'
+  | 'ease-in-out'
+
+export type RecusUiLayerAnimation = {
+  preset: RecusUiAnimationPreset
+  durationMs: number
+  delayMs: number
+  easing: RecusUiAnimationEasing
 }
 
 export type RecusUiButtonSolidBackground = {
@@ -69,7 +101,12 @@ export type RecusUiInputType =
   | 'email'
   | 'number'
   | 'phone'
+  | 'tel'
   | 'url'
+  | 'date'
+  | 'textarea'
+  | 'boolean'
+  | 'radio'
 
 export type RecusUiShadow = {
   color: string
@@ -112,9 +149,11 @@ export type RecusUiButtonLayer = {
   id: string
   type: 'button'
   label: string
+  buttonType?: RecusUiButtonType
   disabled: boolean | string
   variant: RecusUiButtonVariant
   layout: RecusUiLayerLayout
+  animation?: RecusUiLayerAnimation
   style: RecusUiButtonStyle
   events?: RecusUiButtonEvents
 }
@@ -138,6 +177,7 @@ export type RecusUiImageLayerStyle = {
   borderWidth: number
   borderRadius: number
   objectPosition: RecusUiImagePosition
+  shadow?: RecusUiShadow | null
 }
 
 export type RecusUiImageLayer = {
@@ -149,6 +189,7 @@ export type RecusUiImageLayer = {
     type?: string
   }
   layout: RecusUiLayerLayout
+  animation?: RecusUiLayerAnimation
   style: RecusUiImageLayerStyle
 }
 
@@ -162,6 +203,21 @@ export type RecusUiInputLayerStyle = {
   borderRadius: number
   backgroundColor: string
   placeholderColor: string
+  optionStyle?: {
+    selected?: {
+      backgroundColor?: string
+      textColor?: string
+      borderColor?: string
+    }
+    unselected?: {
+      backgroundColor?: string
+      textColor?: string
+      borderColor?: string
+    }
+    borderWidth?: number
+    borderRadius?: number
+    gap?: number
+  }
 }
 
 export type RecusUiInputLayer = {
@@ -172,7 +228,17 @@ export type RecusUiInputLayer = {
   required: boolean
   inputType: RecusUiInputType
   placeholder?: string
+  options?: Array<{
+    id: string
+    label: string
+    value: string
+  }>
+  selectionMode?: 'single' | 'multiple'
+  selectedValues?: string[]
+  minLength?: number
+  maxLength?: number
   layout: RecusUiLayerLayout
+  animation?: RecusUiLayerAnimation
   style: RecusUiInputLayerStyle
 }
 
@@ -215,6 +281,7 @@ export type RecusUiTextLayer = {
   type: 'text'
   content: string
   layout: RecusUiLayerLayout
+  animation?: RecusUiLayerAnimation
   style: RecusUiTextLayerStyle
 }
 
@@ -224,6 +291,10 @@ export type RecusUiImageBackground = {
     url: string
     fit?: RecusUiImageFit
     position?: RecusUiImagePosition
+    overlay?: {
+      color: string
+      opacity: number
+    } | null
   }
 }
 
