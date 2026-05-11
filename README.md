@@ -1,7 +1,7 @@
 # recus-react-native
 
 <p align="center">
-  <img src="https://recus.app/logo-dark.png" width="80" height="80" alt="Recus logo" />
+  <img src="https://www.recus.app/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Frecus-mark-light-800%20(1).0wq0ynk~rnkz8.png&amp;w=48&amp;q=75" width="80" height="80" alt="Recus logo" />
 </p>
 
 <p align="center">
@@ -22,6 +22,18 @@
   <img src="https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey" alt="platform" />
   <img src="https://img.shields.io/badge/expo-compatible-blue" alt="expo compatible" />
 </p>
+
+---
+
+## Tutorial
+
+<p align="center">
+  <video src="https://www.recus.app/mvp.mp4" controls width="720">
+    Your browser does not support the video tag.
+  </video>
+</p>
+
+[Watch the tutorial video](https://www.recus.app/mvp.mp4)
 
 ---
 
