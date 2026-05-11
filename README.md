@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <strong>Onboarding infrastructure for React Native.</strong><br />
-  Install once. Control everything from a dashboard. No App Store release needed.
+  <strong>Animated onboarding infrastructure for React Native.</strong><br />
+  Install the SDK once, then build, animate, validate, and publish complete onboarding flows from Recus.
 </p>
 
 <p align="center">
@@ -25,88 +25,83 @@
 
 ---
 
-## What is Recus?
+## What Recus Does
 
-Recus is an onboarding SDK for React Native apps. You install one package, wrap your app with `RecusAppProvider`, and from that point your entire onboarding flow — every screen, text layer, image, input field, button action, transition, and validation rule — is controlled from the **Recus dashboard**.
+Recus lets a React Native app render onboarding from a server-driven flow. Your app ships a single provider, and Recus handles the rest: SDK key validation, user sync, flow assignment, native rendering, input state, validation, animated transitions, resume state, completion, and analytics.
 
-**No code changes. No App Store submissions. No Jira tickets.**
+The latest SDK UI engine supports dashboard-authored screens with:
 
-Your PM adds a field tomorrow morning. By afternoon every user who opens the app sees it.
+- Solid, image, linear gradient, and radial gradient backgrounds.
+- Freeform or flow-based `text`, `image`, `input`, and `button` layers.
+- Per-layer entrance animations for copy, media, inputs, and buttons.
+- Text, password, email, number, phone, URL, date, textarea, boolean, and radio inputs.
+- Single-select and multi-select radio-style options.
+- Conditional transitions, conditional screen entry, disabled button expressions, and templated text.
+- Back navigation through dashboard-authored back buttons, Android hardware back, and iOS edge swipe when enabled.
 
-### The problem Recus solves
+This means a team can create or change a complete onboarding journey without changing app code or waiting for an App Store release.
 
-Every React Native team building onboarding faces the same cycle:
+---
 
-```
-PM wants to change onboarding
-  → files Jira ticket
-    → dev picks it up next sprint
-      → PR, QA, App Store review
-        → ships in 2 weeks
-          → PM has forgotten why they needed it
-```
+## Install
 
-With Recus, that cycle becomes:
-
-```
-PM wants to change onboarding
-  → opens Recus dashboard
-    → makes the change
-      → hits publish
-        → live in 60 seconds
+```bash
+npm install recus-react-native
 ```
 
-### How it works
+If your app does not already include the peer packages used by the SDK renderer, install them too:
 
-1. **Install the SDK** — one npm package, no native linking required
-2. **Create your flow** — design onboarding screens in the Recus dashboard
-3. **Wrap your app** — `RecusAppProvider` syncs the app user, assigned flow, resume state, and submissions automatically
-4. **Ship changes instantly** — update screens, layers, and navigation from the dashboard, no release needed
+```bash
+npm install @react-native-async-storage/async-storage @tanstack/react-query zustand expo-linear-gradient react-native-svg
+```
+
+For Expo apps, use `npx expo install` for native packages:
+
+```bash
+npx expo install @react-native-async-storage/async-storage expo-linear-gradient react-native-svg
+npm install @tanstack/react-query zustand recus-react-native
+```
+
+Compatibility target: React 18+, React Native 0.72+, and Expo SDK 49+.
 
 ---
 
 ## Quick Start
 
-### 1. Install
+### 1. Create Your Recus App
 
-```bash
-npm install recus-react-native
-# or
-yarn add recus-react-native
-# or
-pnpm add recus-react-native
-```
+1. Sign up at [recus.app](https://recus.app).
+2. Create a new App for your React Native product.
+3. Copy the publishable SDK key from the App settings. Publishable keys usually start with `pk_live_` or `pk_test_`.
+4. Create and publish your first onboarding flow.
 
-> **Compatibility:** Expo SDK 49+ and bare React Native 0.72+. No native linking required.
+Only use the publishable key in your app. Secret keys belong on your backend.
 
-### 2. Create your Recus account
+### 2. Wrap Your App
 
-1. Go to **[recus.app](https://recus.app)** and sign up
-2. Click **"New App"** and give it a name (e.g. "My Health App")
-3. Go to **Settings → SDK Keys** and copy your **publishable key** (starts with `pk_live_`)
-4. Go to **Flows → New Flow** and create your first onboarding flow
+`RecusAppProvider` should sit above your app navigation so the onboarding layer can render over the full application.
 
-> ⚠️ Your publishable key (`pk_live_...`) is safe to include in your app. Never use your secret key (`sk_live_...`) in client-side code.
-
-### 3. Wrap your app
-
-**Expo Router (`app/_layout.tsx`):**
+Expo Router:
 
 ```tsx
-import { RecusAppProvider } from 'recus-react-native'
 import { Stack } from 'expo-router'
+import { RecusAppProvider } from 'recus-react-native'
 
 export default function RootLayout() {
-  const { user } = useAuth() // your own auth
+  const { user } = useAuth()
 
   return (
     <RecusAppProvider
       sdkKey="pk_live_xxxxxxxxxxxxxxxxxxxx"
-      user={user ? {
-        userId: user.id,        // required
-        email:  user.email,     // optional
-        name:   user.name,      // optional
-      } : undefined}
+      user={
+        user
+          ? {
+              userId: user.id,
+              email: user.email,
+              name: user.name,
+            }
+          : undefined
+      }
     >
       <Stack />
     </RecusAppProvider>
@@ -114,11 +109,11 @@ export default function RootLayout() {
 }
 ```
 
-**React Navigation (`App.tsx`):**
+React Navigation:
 
 ```tsx
-import { RecusAppProvider } from 'recus-react-native'
 import { NavigationContainer } from '@react-navigation/native'
+import { RecusAppProvider } from 'recus-react-native'
 
 export default function App() {
   const { user } = useAuth()
@@ -136,163 +131,526 @@ export default function App() {
 }
 ```
 
-That's it. Run your app, sign in with a test user, and your onboarding flow will appear automatically.
+When `user.userId` becomes available, Recus loads the assigned flow. If the user has not completed onboarding, the flow appears above your app as a native overlay.
 
 ---
 
-## How RecusAppProvider works
+## How the Provider Works
 
-`RecusAppProvider` sits above your entire app as an invisible layer.
+`RecusAppProvider` is the integration point between your app and Recus.
 
-- When `user` is `undefined` — Recus does nothing. Zero performance impact.
-- When `user.userId` is set — Recus checks if that user needs to complete onboarding
-- If onboarding is needed — the flow appears above your app (native view, not a modal)
-- If the user already started — Recus resumes from the last persisted screen and restores submitted values
-- If onboarding is complete — Recus stays invisible forever
-- If the Recus API is down — Recus fails silently. **Your app always works.**
+It automatically:
 
-Your existing navigation, routing, and component tree are never modified.
+- Authenticates the SDK key.
+- Fetches the active app onboarding flow.
+- Prefetches image assets before showing the flow.
+- Creates or reuses the Recus app user for your `user.userId`.
+- Loads assigned onboarding data and resume state for that user.
+- Persists the current screen as the user moves through onboarding.
+- Stores submitted input values, screen-time analytics, and completion state.
+- Hides itself when the user is logged out, onboarding is not ready, or onboarding is complete.
+
+Your app navigation is not replaced or mutated. Recus renders a separate absolute overlay only when onboarding should be active.
 
 ---
 
-## Creating an Account on Recus.app
+## Building an Onboarding Flow
 
-### Step 1 — Sign up
+A Recus onboarding flow is a list of screens. Each screen can use the dashboard UI engine by providing a `ui` config with a canvas, background, and layers.
 
-Visit **[recus.app](https://recus.app)** and create a free account. No credit card required.
+At a high level, a custom screen looks like this:
 
-### Step 2 — Create an App
+```json
+{
+  "id": "welcome",
+  "ui": {
+    "schemaVersion": "1.0",
+    "canvas": {
+      "width": 390,
+      "height": 844,
+      "device": "iphone"
+    },
+    "background": {
+      "type": "gradient",
+      "gradient": {
+        "type": "radial",
+        "angle": 0,
+        "stops": [
+          { "color": "#FFF7ED", "position": 0 },
+          { "color": "#FDBA74", "position": 1 }
+        ]
+      }
+    },
+    "layers": []
+  },
+  "inputs": [],
+  "transitions": [{ "to": "profile", "backAllowed": true }]
+}
+```
 
-An **App** in Recus represents one of your React Native applications.
+The SDK normalizes loose dashboard JSON before rendering it. Missing optional values use safe defaults, malformed layers are ignored, and unsupported input types fall back to `text`.
 
-- Click **"New App"**
-- Give it a name (e.g. "DonorApp iOS")
-- Each App has its own SDK key and user database
+---
 
-### Step 3 — Get your SDK Key
+## Layer Types
 
-Inside your App → **Settings → SDK Keys**
+Every rendered object is a layer. Layers can be absolutely positioned with `freeform` layout or placed in document flow with `flow` layout.
 
-| Key | Prefix | Where to use |
-|-----|--------|-------------|
-| Publishable key | `pk_live_` | In your React Native app ✓ |
-| Secret key | `sk_live_` | On your backend server only |
+Common layout fields:
 
-### Step 4 — Create a Flow
+```json
+{
+  "position": "freeform",
+  "x": "10%",
+  "y": "20%",
+  "width": "80%",
+  "height": "hug",
+  "zIndex": 2
+}
+```
 
-A **Flow** is the sequence of screens your users move through.
+Supported dimensions are numbers, percentages such as `"80%"`, `"fill"`, and `"hug"`.
 
-1. Click **"New Flow"** inside your App
-2. Add screens — each screen can have a background (solid, gradient, image), text layers, image layers, inputs, and buttons
-3. Configure inputs — text, password, boolean, email, number, phone, and URL fields are supported by the SDK renderer
-4. Configure navigation — buttons can continue, skip, or go back when the transition allows it
-5. Set validation rules and mark fields as mandatory
-6. Click **"Publish"** — changes go live instantly
+### Text Layers
 
-### Step 5 — Test it
+Use text layers for headings, body copy, helper text, and dynamic copy.
 
-Run your app with a test user. The flow will appear when `user.userId` is set. Complete the flow — it will never appear again for that user.
+```json
+{
+  "id": "headline",
+  "type": "text",
+  "content": "Welcome, {{ firstName }}",
+  "layout": { "position": "freeform", "x": "8%", "y": "12%", "width": "84%", "height": "hug" },
+  "animation": { "preset": "slide-up", "durationMs": 420, "delayMs": 80, "easing": "ease-out" },
+  "style": {
+    "color": "#111827",
+    "opacity": 1,
+    "fontSize": 32,
+    "fontWeight": "800",
+    "fontStyle": "normal",
+    "textAlign": "center",
+    "lineHeight": 1.2,
+    "letterSpacing": -0.4,
+    "textTransform": "none",
+    "textDecoration": "none"
+  }
+}
+```
+
+Text supports template interpolation from onboarding values using `{{ fieldId }}`. Arrays can also be joined with `{{ interests.join(", ") }}`.
+
+### Image Layers
+
+Use image layers for illustrations, avatars, product screenshots, or branded graphics.
+
+```json
+{
+  "id": "hero",
+  "type": "image",
+  "source": { "url": "https://cdn.example.com/onboarding/hero.png" },
+  "alt": "Product preview",
+  "layout": { "position": "freeform", "x": "15%", "y": "24%", "width": "70%", "height": 220 },
+  "animation": { "preset": "zoom-in", "durationMs": 380, "delayMs": 160, "easing": "ease-out" },
+  "style": {
+    "opacity": 1,
+    "objectFit": "cover",
+    "objectPosition": "center",
+    "shape": "rounded",
+    "borderRadius": 24,
+    "borderWidth": 0,
+    "borderColor": "#000000",
+    "shadow": { "color": "#000000", "x": 0, "y": 10, "blur": 24 }
+  }
+}
+```
+
+Supported image fit values are `cover`, `contain`, `fill`, `none`, and `scale-down`. Positions include `top`, `bottom`, `left`, `right`, `center`, and corner positions.
+
+### Input Layers
+
+Input layers connect directly to the screen input state and validation system.
+
+```json
+{
+  "id": "email-input",
+  "type": "input",
+  "fieldId": "email",
+  "label": "Email",
+  "required": true,
+  "inputType": "email",
+  "placeholder": "you@example.com",
+  "layout": { "position": "freeform", "x": "8%", "y": "48%", "width": "84%", "height": 56 },
+  "animation": { "preset": "fade-in", "durationMs": 260, "delayMs": 220, "easing": "ease-out" },
+  "style": {
+    "fontSize": 16,
+    "labelSize": 13,
+    "textColor": "#111827",
+    "labelColor": "#374151",
+    "borderColor": "#E5E7EB",
+    "borderWidth": 1,
+    "borderRadius": 12,
+    "backgroundColor": "#FFFFFF",
+    "placeholderColor": "#9CA3AF"
+  }
+}
+```
+
+Supported input types are `text`, `password`, `email`, `number`, `phone`, `tel`, `url`, `date`, `textarea`, `boolean`, and `radio`.
+
+Radio inputs support single or multiple selection:
+
+```json
+{
+  "id": "interests",
+  "type": "input",
+  "fieldId": "interests",
+  "label": "What are you interested in?",
+  "required": true,
+  "inputType": "radio",
+  "selectionMode": "multiple",
+  "options": [
+    { "id": "fitness", "label": "Fitness", "value": "fitness" },
+    { "id": "nutrition", "label": "Nutrition", "value": "nutrition" },
+    { "id": "sleep", "label": "Sleep", "value": "sleep" }
+  ],
+  "layout": { "position": "freeform", "x": "8%", "y": "36%", "width": "84%", "height": 220 },
+  "style": {
+    "fontSize": 15,
+    "labelSize": 13,
+    "textColor": "#111827",
+    "labelColor": "#374151",
+    "borderColor": "#E5E7EB",
+    "borderWidth": 1,
+    "borderRadius": 14,
+    "backgroundColor": "#FFFFFF",
+    "placeholderColor": "#9CA3AF",
+    "optionStyle": {
+      "selected": { "backgroundColor": "#FEF3C7", "textColor": "#92400E", "borderColor": "#F59E0B" },
+      "unselected": { "backgroundColor": "#FFFFFF", "textColor": "#111827", "borderColor": "#E5E7EB" },
+      "borderRadius": 12,
+      "gap": 8
+    }
+  }
+}
+```
+
+### Button Layers
+
+Button layers can use semantic `buttonType` values or explicit tap actions.
+
+```json
+{
+  "id": "continue-button",
+  "type": "button",
+  "label": "Continue",
+  "buttonType": "continue",
+  "disabled": "!email",
+  "variant": "primary",
+  "layout": { "position": "freeform", "x": "8%", "y": "84%", "width": "84%", "height": 56 },
+  "animation": { "preset": "pop", "durationMs": 360, "delayMs": 320, "easing": "ease-out" },
+  "style": {
+    "background": {
+      "type": "linear-gradient",
+      "angle": 90,
+      "stops": [
+        { "color": "#F59E0B", "position": 0 },
+        { "color": "#FB923C", "position": 1 }
+      ]
+    },
+    "textColor": "#FFFFFF",
+    "borderColor": "#F59E0B",
+    "borderWidth": 0,
+    "borderRadius": 16,
+    "fontSize": 16,
+    "fontWeight": "700",
+    "shadow": { "color": "#F59E0B", "x": 0, "y": 8, "blur": 18 }
+  }
+}
+```
+
+Reserved button types are:
+
+- `continue`: validates the current screen, submits values, and follows the next matching transition or completes the flow.
+- `skip`: advances without validating the current screen.
+- `back`: returns to the previous screen when the transition into the current screen has `backAllowed: true`.
+
+Buttons can also run explicit actions:
+
+```json
+{
+  "events": {
+    "onTap": [
+      { "action": "validate", "fieldIds": ["email"] },
+      { "action": "submit" },
+      { "action": "navigate", "to": "profile" }
+    ]
+  }
+}
+```
+
+Supported action names are `navigate`, `validate`, `submit`, and `complete`.
+
+---
+
+## Animations
+
+Every `text`, `image`, `input`, and `button` layer can include an `animation` object.
+
+```json
+{
+  "animation": {
+    "preset": "slide-up",
+    "durationMs": 300,
+    "delayMs": 120,
+    "easing": "ease-out"
+  }
+}
+```
+
+Supported presets:
+
+| Preset | Best used for | Behavior |
+|--------|---------------|----------|
+| `fade-in` | Body copy, helper text, subtle UI | Starts transparent and fades to full opacity |
+| `slide-up` | Headlines, cards, form fields | Starts slightly below and slides into place |
+| `slide-down` | Top banners, alerts | Starts slightly above and slides into place |
+| `slide-left` | Right-side content, sequential cards | Starts to the right and slides left into place |
+| `slide-right` | Back affordances, left-side content | Starts to the left and slides right into place |
+| `zoom-in` | Hero images, illustrations | Starts slightly smaller and scales to full size |
+| `pop` | Primary buttons, badges, success states | Scales past full size briefly, then settles |
+| `bounce` | Playful illustrations or prompts | Uses a spring on vertical movement |
+| `pulse` | Calls to action or attention hints | Briefly scales up and returns |
+
+Supported easing values are `linear`, `ease`, `ease-in`, `ease-out`, and `ease-in-out`. If easing is omitted, the SDK uses `ease-out`. If duration is omitted, the SDK uses `300ms`. If delay is omitted, the SDK uses `0ms`.
+
+Animation is implemented with React Native's `Animated` native driver for opacity and transforms. The SDK also respects the OS reduce-motion setting: when reduce motion is enabled, animated layers render immediately in their final state.
+
+### Animation Recipes
+
+Use staggered delays to make a screen feel intentional:
+
+```json
+[
+  { "id": "headline", "animation": { "preset": "slide-up", "durationMs": 420, "delayMs": 0, "easing": "ease-out" } },
+  { "id": "hero", "animation": { "preset": "zoom-in", "durationMs": 360, "delayMs": 120, "easing": "ease-out" } },
+  { "id": "email", "animation": { "preset": "fade-in", "durationMs": 260, "delayMs": 220, "easing": "ease-out" } },
+  { "id": "continue", "animation": { "preset": "pop", "durationMs": 360, "delayMs": 320, "easing": "ease-out" } }
+]
+```
+
+Good defaults:
+
+- Marketing welcome screen: `slide-up` headline, `zoom-in` image, `pop` button.
+- Form screen: `fade-in` labels and inputs, `slide-up` button.
+- Success screen: `bounce` illustration, `fade-in` copy, `pulse` final CTA.
+- Preference picker: `slide-up` title, `fade-in` options, `pop` continue button.
+
+---
+
+## Backgrounds
+
+Screens can use solid, image, linear gradient, or radial gradient backgrounds.
+
+Solid:
+
+```json
+{ "type": "solid", "color": "#FFFFFF" }
+```
+
+Linear gradient:
+
+```json
+{
+  "type": "gradient",
+  "gradient": {
+    "type": "linear",
+    "angle": 180,
+    "stops": [
+      { "color": "#FFF7ED", "position": 0 },
+      { "color": "#FDBA74", "position": 1 }
+    ]
+  }
+}
+```
+
+Radial gradient:
+
+```json
+{
+  "type": "gradient",
+  "gradient": {
+    "type": "radial",
+    "angle": 0,
+    "stops": [
+      { "color": "#FFFFFF", "position": 0 },
+      { "color": "#F59E0B", "position": 1 }
+    ]
+  }
+}
+```
+
+Image background with overlay:
+
+```json
+{
+  "type": "image",
+  "image": {
+    "url": "https://cdn.example.com/onboarding/background.jpg",
+    "fit": "cover",
+    "position": "center",
+    "overlay": {
+      "color": "#000000",
+      "opacity": 0.35
+    }
+  }
+}
+```
+
+---
+
+## Validation and Conditions
+
+Inputs support required checks, min and max length checks, type-specific validation, and validation rules from the flow payload.
+
+Built-in validations include:
+
+- `email`: must look like an email address.
+- `number`: must be numeric.
+- `phone` and `tel`: must look like a phone number.
+- `url`: must start with `http://` or `https://`.
+- `boolean`: must be `true` when required.
+- `radio`: must have at least one selected value when required.
+
+Validation rules can be attached to a screen input:
+
+```json
+{
+  "id": "age",
+  "label": "Age",
+  "type": "number",
+  "required": true,
+  "validation": {
+    "rules": [
+      { "type": "min", "value": 18, "message": "You must be at least 18." },
+      { "type": "max", "value": 120, "message": "Please enter a valid age." }
+    ]
+  }
+}
+```
+
+Expressions can drive transitions, disabled states, and screen conditions.
+
+Examples:
+
+```json
+{
+  "transitions": [
+    { "to": "student-plan", "condition": "role == 'student'", "backAllowed": true },
+    { "to": "default-plan", "condition": "role != 'student'", "backAllowed": true }
+  ]
+}
+```
+
+```json
+{
+  "conditions": {
+    "expression": "acceptedTerms == true",
+    "elseGoTo": "terms"
+  }
+}
+```
+
+Expression helpers include comparisons (`==`, `!=`, `>`, `>=`, `<`, `<=`), boolean logic (`&&`, `||`, `!`), `.length`, `.includes("value")`, and `.join(", ")` for arrays.
+
+---
+
+## Navigation and Persistence
+
+Recus onboarding navigation is isolated from your app navigation.
+
+- Forward transitions slide the next screen in after the screen has mounted.
+- The SDK waits one animation frame before starting the slide so image-heavy custom UI screens avoid first-render jitter.
+- Back navigation is available only when the incoming transition has `backAllowed: true`.
+- Android hardware back and iOS edge swipe are supported for allowed back transitions.
+- The current route is persisted so users can leave and resume later.
+- Completion persists submitted values and per-screen time-spent analytics.
 
 ---
 
 ## API Reference
 
-### RecusAppProvider
-
-The root provider. Wrap your entire app with this once.
+### `RecusAppProvider`
 
 ```tsx
 import { RecusAppProvider } from 'recus-react-native'
 
-<RecusAppProvider
-  sdkKey="pk_live_xxx"    // your publishable key — required
-  user={user}             // RecusUser | undefined — required
->
+<RecusAppProvider sdkKey="pk_live_xxx" user={user}>
   <YourApp />
 </RecusAppProvider>
 ```
 
-**Props:**
+Props:
 
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
-| `sdkKey` | `string` | ✓ | Your publishable key from the dashboard |
-| `user` | `RecusUser \| undefined` | ✓ | Your authenticated user. Pass `undefined` when logged out |
-| `children` | `React.ReactNode` | ✓ | Your app tree |
+| `sdkKey` | `string` | Yes | Publishable key from your Recus dashboard |
+| `user` | `RecusUser \| undefined` | Yes | Authenticated app user, or `undefined` when logged out |
+| `children` | `React.ReactNode` | Yes | Your app tree |
 
-`RecusAppProvider` automatically:
+### `RecusUser`
 
-- Authenticates the SDK key and loads the active app onboarding flow
-- Creates or reuses the Recus app user for `user.userId`
-- Loads the user's assigned onboarding flow and persisted onboarding data
-- Persists the current screen, submitted input values, screen-time analytics, and completion state
-- Prefetches image assets before publishing a flow to the overlay renderer
-
----
-
-### RecusUser type
-
-```typescript
+```ts
 type RecusUser = {
-  userId: string        // required — your user's ID
-  email?:  string       // optional
-  name?:   string       // optional
-  [key: string]: unknown // any additional metadata
+  userId: string
+  email?: string
+  name?: string
+  [key: string]: unknown
 }
 ```
 
-**Important:** Always use your own user IDs. Recus stores all data against your IDs so you can join it with your database without any mapping.
+Always pass your own stable user ID. Recus stores onboarding state against your IDs so you can match data back to your own backend.
 
----
+### `useRecus`
 
-### useRecus
-
-Read the current Recus onboarding state from anywhere inside `RecusAppProvider`.
+Use `useRecus` inside `RecusAppProvider` when your app needs to inspect onboarding state.
 
 ```tsx
 import { useRecus } from 'recus-react-native'
 
-function ProfileScreen() {
+function ProfileCompletionBanner() {
   const { isComplete, isOnboardingReady } = useRecus()
 
+  if (isComplete) return null
+
   return (
-    <View>
-      {!isComplete && (
-        <Banner
-          text={
-            isOnboardingReady
-              ? 'Complete your profile to unlock all features'
-              : 'Preparing onboarding...'
-          }
-        />
-      )}
-      <ProfileContent />
-    </View>
+    <Banner>
+      {isOnboardingReady
+        ? 'Complete onboarding to unlock all features.'
+        : 'Preparing onboarding...'}
+    </Banner>
   )
 }
 ```
 
-**Returns:**
+Returned values include:
 
-| Value | Type | Description |
-|-------|------|-------------|
-| `user` | `RecusUser \| undefined` | Normalized active user |
-| `onboardingFlow` | `AppOnboardingFlow \| undefined` | Loaded flow assigned to the current app user |
-| `screens` | `AppOnboardingScreenConfig[]` | Normalized screens for the active flow |
-| `initialRoute` | `string \| undefined` | First screen or persisted resume screen |
-| `onboardingValues` | `Record<string, string \| boolean>` | Live input values |
-| `submittedValues` | `Record<string, string \| boolean>` | Values submitted for completed screens |
-| `analytics` | `Record<string, { timeSpentMs: number }>` | Screen-time analytics collected locally |
-| `isOnboardingReady` | `boolean` | `true` when a flow and initial route are ready to render |
-| `isActive` | `boolean` | `true` when `user.userId` is set |
-| `isNavigationEnabled` | `boolean` | `true` once user sync and local hydration are complete |
-| `isComplete` | `boolean` | `true` once onboarding has been completed locally or on the server |
+| Value | Description |
+|-------|-------------|
+| `user` | Normalized active Recus user |
+| `onboardingFlow` | Flow assigned to the current app user |
+| `screens` | Normalized screen configs |
+| `initialRoute` | First screen or persisted resume screen |
+| `onboardingValues` | Live input values |
+| `submittedValues` | Values submitted for completed screens |
+| `analytics` | Local screen-time analytics |
+| `isOnboardingReady` | Whether a flow and initial route are ready |
+| `isActive` | Whether `user.userId` is set |
+| `isNavigationEnabled` | Whether user sync and local hydration are complete |
+| `isComplete` | Whether onboarding is complete locally or on the server |
 
----
+### API Helpers
 
-### API helpers
-
-The package also exports the underlying app SDK methods and response types if you need to integrate with Recus outside the automatic provider flow.
+The package also exports lower-level helpers for custom integrations:
 
 ```tsx
 import {
@@ -304,127 +662,72 @@ import {
 } from 'recus-react-native'
 ```
 
-Response data is normalized before it reaches your app:
-
-- Missing or malformed screen arrays become an empty `screens` array
-- Unsupported input types fall back to `text`
-- User onboarding data and metadata always resolve to JSON objects
-- Assigned onboarding flows are normalized the same way as app-level flows
-
 ---
 
-## Dashboard UI Engine
+## Complete Onboarding Checklist
 
-The SDK can render custom dashboard-authored UI through each screen's `ui` config. Supported layers include:
+Use this flow to add an entire onboarding journey with Recus:
 
-- `text` — styled copy with alignment, font weight, line height, letter spacing, transform, and decoration support
-- `image` — remote image layers with object fit, object position, crop, opacity, shape, border, and radius support
-- `input` — freeform inputs connected to the same validation and submission state as standard screens
-- `button` — tappable controls with solid or gradient backgrounds
-
-Reserved button/action IDs are wired by the SDK:
-
-- `continue` validates the current screen, submits its values, and advances to the next transition or completes the flow
-- `skip` advances without validating the current screen
-- `back` returns to the previous screen when the transition has `backAllowed: true`
-
----
-
-## Navigation and Persistence
-
-Recus keeps onboarding navigation isolated from your app navigation. Dashboard transitions drive the onboarding stack, while your app's routes stay untouched.
-
-- Forward transitions slide in after the next screen has mounted, reducing image and custom UI jank
-- Back navigation works from dashboard-authored `back` buttons, Android hardware back, and iOS edge swipe when `backAllowed` is enabled
-- The current screen is persisted, so users can leave and resume onboarding later
-- Completion persists with submitted values and screen-time analytics
-
----
-
-## Pricing
-
-| Plan | Price | MAUs | Key features |
-|------|-------|------|-------------|
-| **Starter** | Free | 500 | 1 flow, basic analytics, Recus badge |
-| **Growth** | $79/mo annual · $99/mo monthly | 5,000 | Unlimited flows, analytics, webhooks, white-label |
-| **Pro** | $199/mo annual · $249/mo monthly | 25,000 | Multiple apps, SSO, priority support |
-
-Overage: $8 per 1,000 additional MAUs. Never hard cut off — 7-day grace period always applies.
-
----
-
-## Frequently Asked Questions
-
-**Does Recus work with Expo Go?**
-Yes. Recus has no native dependencies and works with Expo Go out of the box.
-
-**Does Recus modify my navigation?**
-No. Recus sits above your app as an absolutely positioned native view. Your navigation, routes, and component tree are completely untouched.
-
-**What happens if the Recus API is down?**
-Recus fails silently. Your app continues working normally. Onboarding will appear once the API is reachable again.
-
-**Can I design custom screens?**
-Yes. Build screens in the Recus dashboard using backgrounds, text layers, image layers, inputs, and buttons. The SDK renders that UI natively from the published flow config.
-
-**Where is user data stored?**
-All submitted field values are stored against your own user IDs on Recus infrastructure. You can retrieve them via the API or receive them via webhooks on flow completion.
-
-**Does Recus support multiple flows?**
-Yes. Each App can have multiple flows. The active mandatory flow is shown to users who haven't completed it.
-
-**Can I A/B test onboarding flows?**
-A/B testing is available on the Growth plan and above.
+1. Create a Recus App and copy the publishable SDK key.
+2. Install the SDK and renderer peer packages.
+3. Wrap your app root with `RecusAppProvider`.
+4. Pass `undefined` as `user` while logged out and `{ userId }` after login.
+5. Create screens in the Recus dashboard.
+6. Add backgrounds: solid, image, linear gradient, or radial gradient.
+7. Add text layers for headings, body copy, legal copy, and dynamic templates.
+8. Add image layers for product visuals, illustrations, and avatars.
+9. Add input layers for each piece of data you need to collect.
+10. Add validation rules and mark required fields.
+11. Add button layers with `continue`, `skip`, and `back` behavior.
+12. Add per-layer animations with staggered `delayMs` values.
+13. Configure transitions and conditions between screens.
+14. Enable `backAllowed` only where users should be able to return.
+15. Publish the flow.
+16. Test with a new user ID.
+17. Complete the flow and verify that it does not reappear for that user.
 
 ---
 
 ## Troubleshooting
 
-**Onboarding is not appearing**
+### Onboarding Is Not Appearing
 
-Check in order:
-1. Is `user.userId` set? Log it: `console.log('[debug] user:', user)`
-2. Is there an active mandatory flow in your dashboard?
-3. Has this user already completed the flow? Check the dashboard → Users
-4. Is your SDK key correct? It must start with `pk_live_` or `pk_test_`
+Check these in order:
 
-**Onboarding appeared once but never again**
+1. Confirm `user.userId` is set.
+2. Confirm the SDK key is a publishable key.
+3. Confirm an active flow is published in the Recus dashboard.
+4. Confirm the user has not already completed the assigned flow.
+5. Check device logs for `Recus SDK Validation` or `Recus SDK Onboarding Loaded`.
 
-This is correct. Once a user completes a flow, Recus caches and syncs the completion state. Use a new test user ID, or clear this package's local persisted store while testing.
+### A Screen Shows but a Layer Is Missing
 
-**"RecusAppProvider must be at the root"**
+The SDK ignores malformed layers instead of crashing the app. Check that the layer has a supported `type`, valid `layout`, and any required fields such as `content` for text, `source.url` for images, `fieldId` for inputs, or `label` for buttons.
 
-Make sure `RecusAppProvider` wraps your entire app including `NavigationContainer`:
+### Animations Are Not Playing
 
-```tsx
-// ✓ Correct
-<RecusAppProvider sdkKey="..." user={user}>
-  <NavigationContainer>
-    <Stack />
-  </NavigationContainer>
-</RecusAppProvider>
+Animations render immediately when the device has reduce motion enabled. Also check that the layer includes a valid `animation.preset`; unknown presets are ignored.
 
-// ✗ Wrong
-<NavigationContainer>
-  <RecusAppProvider sdkKey="..." user={user}>
-    <Stack />
-  </RecusAppProvider>
-</NavigationContainer>
-```
+### Back Does Not Work
+
+Back behavior only works when the transition into the current screen has `backAllowed: true`. Add that flag to the previous screen's transition.
+
+### Onboarding Appeared Once and Never Again
+
+That is expected after completion. Use a fresh test `userId` or clear the user's onboarding data while testing.
 
 ---
 
 ## Links
 
-- 📖 **Docs:** [recus.app/docs](https://recus.app/docs)
-- 🖥️ **Dashboard:** [app.recus.app](https://app.recus.app)
-- 📦 **npm:** [npmjs.com/package/recus-react-native](https://www.npmjs.com/package/recus-react-native)
-- 🐛 **Issues:** [github.com/recusapp/recus-react-native/issues](https://github.com/recusapp/recus-react-native/issues)
-- 🐦 **X:** [@recusapp](https://x.com/recusapp)
-- 💬 **Support:** support@recus.app
+- Docs: [recus.app/docs](https://recus.app/docs)
+- Dashboard: [app.recus.app](https://app.recus.app)
+- npm: [npmjs.com/package/recus-react-native](https://www.npmjs.com/package/recus-react-native)
+- Issues: [github.com/recusapp/recus-react-native/issues](https://github.com/recusapp/recus-react-native/issues)
+- Support: support@recus.app
 
 ---
 
 ## License
 
-MIT © [Recus](https://recus.app)
+MIT (c) [Recus](https://recus.app)
